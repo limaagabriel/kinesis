@@ -1,12 +1,14 @@
 var kinect = require("kinect2")();
 
-function handle(bodyFrame) {
-
-}
-
 if(kinect && kinect.open()) {
     console.log("Kinect opened!");
-    kinect.on("bodyFrame", handle);
+    kinect.on("bodyFrame", (bodyFrame) => {
+        bodyFrame.bodies.forEach((body) => {
+            if(body.tracked) {
+                console.log(body);
+            }
+        });
+    });
 }
 else {
     console.log("Something went wrong :/");
