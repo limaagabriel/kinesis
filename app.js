@@ -5,7 +5,8 @@ if(kinect && kinect.open()) {
     kinect.on("bodyFrame", (bodyFrame) => {
         bodyFrame.bodies.forEach((body) => {
             if(body.tracked) {
-                console.log(body);
+                console.log("Hey! Body tracked!");
+                console.log(body.joints);
             }
         });
     });
