@@ -1,2 +1,2 @@
-# kinesis
-Project to control a Kinect data
+# Kinesis
+Project to control a robot based on Kinect data.
