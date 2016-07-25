@@ -27,10 +27,9 @@ namespace Kinesis
         public MainWindow()
         {
             InitializeComponent();
+            angleBtn.Click += angleBtn_Click;
             kinect.Initialize(RuntimeOptions.UseSkeletalTracking);
-            kinect.NuiCamera.TryToSetAngle(0);
             kinect.SkeletonFrameReady += new EventHandler<SkeletonFrameReadyEventArgs>(nui_SkeletonFrameReady);
-            kinect.NuiCamera.TryToSetAngle(20);
         }
 
         void nui_SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
@@ -81,6 +80,24 @@ namespace Kinesis
         private void Window_Closed(object sender, EventArgs e)
         {
             kinect.Uninitialize();
+        }
+
+        void angleBtn_Click(object sender, RoutedEventArgs e)
+        {
+            int angle;
+            bool result = int.TryParse(angleInput.Text, out angle);
+            if(result)
+            {
+                var movement = kinect.NuiCamera.TryToSetAngle(angle);
+                if(!movement)
+                {
+                    MessageBox.Show("Movement not supported");
+                }
+            }
+            else
+            {
+                MessageBox.Show("Value not parsable u.u");
+            }
         }
     }
 }
