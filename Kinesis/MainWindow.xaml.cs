@@ -30,11 +30,6 @@ namespace Kinesis
             kinectRuntime.SkeletonFrameReady += new EventHandler<SkeletonFrameReadyEventArgs>(nui_SkeletonFrameReady);
         }
 
-        private void window_loaded(object sender, RoutedEventArgs e)
-        {
-            
-        }
-
         void nui_SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
             // Pega todos os 6 esqueletos
