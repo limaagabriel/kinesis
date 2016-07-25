@@ -42,6 +42,16 @@ namespace Kinesis
             }
         }
 
+        bool WriteToPort(string msg)
+        {
+            if(port != null && port.IsOpen)
+            {
+                port.Write(msg);
+                return true;
+            }
+            return false;
+        }
+
         void nui_SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
             SkeletonFrame allSkeletons = e.SkeletonFrame;
@@ -85,11 +95,16 @@ namespace Kinesis
 
             Canvas.SetLeft(ellipse, colourX);
             Canvas.SetTop(ellipse, colourY);
+            WriteToPort("hue\n");
         }
 
         private void Window_Closed(object sender, EventArgs e)
         {
             kinect.Uninitialize();
+            if(port != null)
+            {
+                port.Close();
+            }
         }
 
         void UpdateAngle(object sender, RoutedEventArgs e)
