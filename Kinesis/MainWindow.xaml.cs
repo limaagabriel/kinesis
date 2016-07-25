@@ -14,22 +14,32 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Microsoft.Research.Kinect.Nui;
 using Kinect.Extensions;
+using System.IO.Ports;
 
 namespace Kinesis
 {
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : Window
     {
-        Runtime kinect = new Runtime();
+        Runtime kinect = Runtime.Kinects[0];
+        SerialPort port = null;
 
         public MainWindow()
         {
             InitializeComponent();
-            angleBtn.Click += angleBtn_Click;
+            angleBtn.Click += UpdateAngle;
+            portBtn.Click += SetUpSerialConnection;
+            portUpdate.Click += UpdatePortSelection;
             kinect.Initialize(RuntimeOptions.UseSkeletalTracking);
             kinect.SkeletonFrameReady += new EventHandler<SkeletonFrameReadyEventArgs>(nui_SkeletonFrameReady);
+        }
+
+        void UpdatePortSelection(object sender, RoutedEventArgs e)
+        {
+            portInput.Items.Clear();
+            foreach(string serialPort in SerialPort.GetPortNames())
+            {
+                portInput.Items.Add(serialPort);
+            }
         }
 
         void nui_SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
@@ -82,9 +92,9 @@ namespace Kinesis
             kinect.Uninitialize();
         }
 
-        void angleBtn_Click(object sender, RoutedEventArgs e)
+        void UpdateAngle(object sender, RoutedEventArgs e)
         {
-            int angle;
+            int angle = 0;
             bool result = int.TryParse(angleInput.Text, out angle);
             if(result)
             {
@@ -98,6 +108,27 @@ namespace Kinesis
             {
                 MessageBox.Show("Value not parsable u.u");
             }
+        }
+
+        void SetUpSerialConnection(object sender, RoutedEventArgs e)
+        { 
+            if(portInput.SelectedIndex >= 0)
+            {
+                string selected = (string)portInput.Items.GetItemAt(portInput.SelectedIndex);
+                if (SerialPort.GetPortNames().Contains(selected))
+                {
+                    if (port != null && port.IsOpen)
+                    {
+                        port.Close();
+                    }
+                    port = new SerialPort(selected, 9600);
+                    port.Open();
+                }
+                else
+                {
+                    MessageBox.Show("I'm not going to connect with this...");
+                }
+            }   
         }
     }
 }

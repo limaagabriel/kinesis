@@ -8,8 +8,11 @@
         mc:Ignorable="d"
         Title="MainWindow" Height="350" Width="525">
     <Grid>
-        <TextBox x:Name="angleInput" Canvas.Left="387" TextWrapping="Wrap" Canvas.Top="257" Width="120" ToolTip="Input some angle!" Cursor="Arrow" Margin="204,153,193,139"/>
-        <Button x:Name="angleBtn" Content="Set Angle" Canvas.Left="387" Canvas.Top="289" Margin="204,202,192,85"/>
         <Canvas Name="cnArea"/>
+        <ListBox x:Name="portInput" Canvas.Left="77" Canvas.Top="164" Width="100" Margin="244,150,173,87" BorderThickness="1" Background="#FFDDDDDD" BorderBrush="#FF707070"/>
+        <TextBox x:Name="angleInput" Canvas.Left="387" TextWrapping="Wrap" Canvas.Top="257" ToolTip="Input some angle!" Cursor="Arrow" Margin="244,254,173,33" BorderThickness="2"/>
+        <Button x:Name="angleBtn" Content="Set Angle" Canvas.Left="387" Canvas.Top="289" Margin="367,254,29,33"/>
+        <Button x:Name="portBtn" Content="Connect" Canvas.Left="387" Canvas.Top="289" Margin="367,150,29,137"/>
+        <Button x:Name="portUpdate" Content="Update Ports" Canvas.Left="387" Canvas.Top="289" Margin="367,200,29,87"/>
     </Grid>
 </Window>
