@@ -22,8 +22,9 @@ namespace Kinesis
     /// </summary>
     public partial class MainWindow : Window
     {
-        KinectSensor kinect = null;
-        SerialPort port = null;
+        private KinectSensor kinect = null;
+        private SerialPort port = null;
+        private WriteableBitmap CameraSource;
 
         public MainWindow()
         {
@@ -33,6 +34,10 @@ namespace Kinesis
             portUpdate.Click += UpdatePortSelection;
             angleBtn.Click += UpdateAngle;
             KinectSensor.KinectSensors.StatusChanged += KinectSensors_StatusChanged;
+            kinect.ColorStream.Enable();
+            kinect.SkeletonStream.Enable();
+            kinect.ColorFrameReady += Kinect_ColorFrameReady;
+            kinect.SkeletonFrameReady += Kinect_SkeletonFrameReady;
         }
 
         private void Window_Closed(object sender, EventArgs e)
@@ -44,6 +49,26 @@ namespace Kinesis
             }
         }
 
+
+        private void Kinect_SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
+        {
+            
+        }
+
+        private void Kinect_ColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
+        {
+            ColorImageFrame frame = e.OpenColorImageFrame();
+            if(frame != null)
+            {
+                byte[] pixelData = new byte[frame.PixelDataLength];
+                frame.CopyPixelDataTo(pixelData);
+
+                camera.Source = BitmapSource.Create(
+                    frame.Width, frame.Height, 96, 96, PixelFormats.Bgr32,
+                    null, pixelData, frame.Width * 4);
+            }
+        }
+        
         private void KinectSensors_StatusChanged(object sender, StatusChangedEventArgs e)
         {
             if (KinectSensor.KinectSensors.Count == 0)

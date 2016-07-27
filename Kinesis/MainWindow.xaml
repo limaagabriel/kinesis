@@ -7,6 +7,7 @@
         mc:Ignorable="d"
         Title="MainWindow" Height="350" Width="525">
     <Grid>
+        <Image Name="camera" Width="160" Height="120" Margin="62,48,295,151"/>
         <TextBox x:Name="angleInput" HorizontalAlignment="Left" Height="23" Margin="269,286,0,0" TextWrapping="Wrap" Text="TextBox" VerticalAlignment="Top" Width="120"/>
         <ListBox x:Name="portInput" HorizontalAlignment="Left" Height="100" Margin="269,154,0,0" VerticalAlignment="Top" Width="100"/>
         <Button x:Name="portBtn" Content="Connect" HorizontalAlignment="Left" Margin="425,166,0,0" VerticalAlignment="Top" Width="75"/>
