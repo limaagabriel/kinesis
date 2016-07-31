@@ -24,20 +24,32 @@ namespace Kinesis
     {
         private KinectSensor kinect = null;
         private SerialPort port = null;
-        private WriteableBitmap CameraSource;
+        private DrawingGroup drawingGroup;
+        private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromArgb(255, 68, 192, 68));
+        private readonly Brush inferredJointBrush = Brushes.Yellow;
+        private const double JointThickness = 10;
+        private readonly Pen trackedBonePen = new Pen(Brushes.Green, 6);
+        private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 1);
+        private const float RenderWidth = 640.0f;
+        private const float RenderHeight = 480.0f;
+        private ImageSource imageSource = null;
+        private int FrameReduction = 10;
+
+        private Point SkeletonPointToScreen(SkeletonPoint skelpoint)
+        {
+            // Convert point to depth space.  
+            // We are not using depth directly, but we do want the points in our 640x480 output resolution.
+            DepthImagePoint depthPoint = kinect.CoordinateMapper.MapSkeletonPointToDepthPoint(skelpoint, DepthImageFormat.Resolution640x480Fps30);
+            return new Point(depthPoint.X, depthPoint.Y);
+        }
 
         public MainWindow()
         {
-            KinectSensors_StatusChanged(null, null);
             InitializeComponent();
+            KinectSensors_StatusChanged(null, null);
             portBtn.Click += SetUpSerialConnection;
             portUpdate.Click += UpdatePortSelection;
             angleBtn.Click += UpdateAngle;
-            KinectSensor.KinectSensors.StatusChanged += KinectSensors_StatusChanged;
-            kinect.ColorStream.Enable();
-            kinect.SkeletonStream.Enable();
-            kinect.ColorFrameReady += Kinect_ColorFrameReady;
-            kinect.SkeletonFrameReady += Kinect_SkeletonFrameReady;
         }
 
         private void Window_Closed(object sender, EventArgs e)
@@ -52,13 +64,59 @@ namespace Kinesis
 
         private void Kinect_SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
-            
+            SkeletonFrame frame = e.OpenSkeletonFrame();
+            canvas.Children.Clear();
+            if (frame != null)
+            {
+                Skeleton[] trackedSkeletons = new Skeleton[frame.SkeletonArrayLength];
+                frame.CopySkeletonDataTo(trackedSkeletons);
+
+
+                if (trackedSkeletons[0].TrackingState != SkeletonTrackingState.NotTracked)
+                {
+                    drawJoints(trackedSkeletons[0]);
+                }
+            }
         }
+
+        private void drawJoints(Skeleton skeleton)
+        {
+            
+            // Render Joints
+            foreach (Joint joint in skeleton.Joints)
+            {
+                Brush drawBrush = null;
+
+                if (joint.TrackingState == JointTrackingState.Tracked)
+                {
+                    drawBrush = this.trackedJointBrush;
+                }
+                else if (joint.TrackingState == JointTrackingState.Inferred)
+                {
+                    drawBrush = this.inferredJointBrush;
+                }
+
+                if (drawBrush != null)
+                {
+                    Ellipse e = new Ellipse();
+                    Point p = SkeletonPointToScreen(joint.Position);
+                    e.Fill = drawBrush;
+                    e.Width = JointThickness;
+                    e.Height = JointThickness;
+                    canvas.Children.Add(e);
+                    Canvas.SetTop(e, p.Y);
+                    Canvas.SetLeft(e, p.X);
+                }
+            }
+        }
+
+       
 
         private void Kinect_ColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
         {
             ColorImageFrame frame = e.OpenColorImageFrame();
-            if(frame != null)
+            
+            if(frame != null && frame.FrameNumber % frameReduction == 0)
             {
                 byte[] pixelData = new byte[frame.PixelDataLength];
                 frame.CopyPixelDataTo(pixelData);
@@ -83,6 +141,12 @@ namespace Kinesis
                 try
                 {
                     kinect.Start();
+                    KinectSensor.KinectSensors.StatusChanged += KinectSensors_StatusChanged;
+                    //kinect.ColorStream.Enable();
+                    kinect.SkeletonStream.Enable();
+                    //kinect.ColorFrameReady += Kinect_ColorFrameReady;
+                    kinect.SkeletonFrameReady += Kinect_SkeletonFrameReady;
+                    angleInput.Text = "" + kinect.ElevationAngle;
                 }
                 catch(Exception e1)
                 {
