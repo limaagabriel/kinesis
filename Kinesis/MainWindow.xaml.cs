@@ -24,21 +24,15 @@ namespace Kinesis
     {
         private KinectSensor kinect = null;
         private SerialPort port = null;
-        private DrawingGroup drawingGroup;
         private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromArgb(255, 68, 192, 68));
         private readonly Brush inferredJointBrush = Brushes.Yellow;
-        private const double JointThickness = 10;
+        private const double JointThickness = 15;
         private readonly Pen trackedBonePen = new Pen(Brushes.Green, 6);
-        private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 1);
-        private const float RenderWidth = 640.0f;
-        private const float RenderHeight = 480.0f;
-        private ImageSource imageSource = null;
-        private int FrameReduction = 10;
+        private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 6);
+        private int frameReduction = 2;
 
         private Point SkeletonPointToScreen(SkeletonPoint skelpoint)
         {
-            // Convert point to depth space.  
-            // We are not using depth directly, but we do want the points in our 640x480 output resolution.
             DepthImagePoint depthPoint = kinect.CoordinateMapper.MapSkeletonPointToDepthPoint(skelpoint, DepthImageFormat.Resolution640x480Fps30);
             return new Point(depthPoint.X, depthPoint.Y);
         }
@@ -71,10 +65,13 @@ namespace Kinesis
                 Skeleton[] trackedSkeletons = new Skeleton[frame.SkeletonArrayLength];
                 frame.CopySkeletonDataTo(trackedSkeletons);
 
-
-                if (trackedSkeletons[0].TrackingState != SkeletonTrackingState.NotTracked)
+                foreach(Skeleton s in trackedSkeletons)
                 {
-                    drawJoints(trackedSkeletons[0]);
+                    if(s.TrackingState == SkeletonTrackingState.Tracked)
+                    {
+                        drawJoints(s);
+                        break;
+                    }
                 }
             }
         }
@@ -89,11 +86,11 @@ namespace Kinesis
 
                 if (joint.TrackingState == JointTrackingState.Tracked)
                 {
-                    drawBrush = this.trackedJointBrush;
+                    drawBrush = trackedJointBrush;
                 }
                 else if (joint.TrackingState == JointTrackingState.Inferred)
                 {
-                    drawBrush = this.inferredJointBrush;
+                    drawBrush = inferredJointBrush;
                 }
 
                 if (drawBrush != null)
@@ -142,10 +139,10 @@ namespace Kinesis
                 {
                     kinect.Start();
                     KinectSensor.KinectSensors.StatusChanged += KinectSensors_StatusChanged;
-                    //kinect.ColorStream.Enable();
                     kinect.SkeletonStream.Enable();
-                    //kinect.ColorFrameReady += Kinect_ColorFrameReady;
+                    kinect.ColorStream.Enable();
                     kinect.SkeletonFrameReady += Kinect_SkeletonFrameReady;
+                    kinect.ColorFrameReady += Kinect_ColorFrameReady;
                     angleInput.Text = "" + kinect.ElevationAngle;
                 }
                 catch(Exception e1)
