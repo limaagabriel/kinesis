@@ -40,10 +40,31 @@ namespace Kinesis
         public MainWindow()
         {
             InitializeComponent();
+            status.Text = "Welcome to Kinesis!";
+            serialMonitor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            serialMonitor.AppendText("Serial monitor:\n");
             KinectSensors_StatusChanged(null, null);
-            portBtn.Click += SetUpSerialConnection;
+            UpdatePortSelection(null, null);
+            connectBtn.Click += SetUpSerialConnection;
             portUpdate.Click += UpdatePortSelection;
+            disconnectBtn.Click += DisconnectPort;
             angleBtn.Click += UpdateAngle;
+            if(port == null)
+            {
+                disconnectBtn.IsEnabled = false;
+            }
+        }
+
+        private void DisconnectPort(object sender, RoutedEventArgs e)
+        {
+            if(port != null)
+            {
+                port.Close();
+                status.Text = "No longer connected with " + port.PortName + ".";
+                port = null;
+                disconnectBtn.IsEnabled = false;
+                connectBtn.IsEnabled = true;
+            }
         }
 
         private void Window_Closed(object sender, EventArgs e)
@@ -79,7 +100,6 @@ namespace Kinesis
         private void drawJoints(Skeleton skeleton)
         {
             
-            // Render Joints
             foreach (Joint joint in skeleton.Joints)
             {
                 Brush drawBrush = null;
@@ -147,7 +167,7 @@ namespace Kinesis
                 }
                 catch(Exception e1)
                 {
-                    this.Close();
+                    Close();
                     MessageBox.Show(e1.Message);
                 }
             }
@@ -166,20 +186,32 @@ namespace Kinesis
         {
             if (portInput.SelectedIndex >= 0)
             {
-                string selected = (string)portInput.Items.GetItemAt(portInput.SelectedIndex);
-                if (SerialPort.GetPortNames().Contains(selected))
+                try
                 {
-                    if (port != null && port.IsOpen)
+                    string selected = (string)portInput.Items.GetItemAt(portInput.SelectedIndex);
+                    if (SerialPort.GetPortNames().Contains(selected))
                     {
-                        port.Close();
+                        if (port != null && port.IsOpen)
+                        {
+                            port.Close();
+                        }
+                        port = new SerialPort(selected, 9600);
+                        port.Open();
+                        disconnectBtn.IsEnabled = true;
+                        connectBtn.IsEnabled = false;
+
+                        status.Text = "Connected to " + port.PortName + " at " + port.BaudRate + "!";
                     }
-                    port = new SerialPort(selected, 9600);
-                    port.Open();
+                    else
+                    {
+                        throw new Exception("I'm not going to connect with this...");
+                    }
                 }
-                else
+                catch (Exception e2)
                 {
-                    MessageBox.Show("I'm not going to connect with this...", "Invalid Serial Port");
+                    MessageBox.Show(e2.Message, "Connection Error");
                 }
+                
             }
         }
 
@@ -189,7 +221,13 @@ namespace Kinesis
             bool result = int.TryParse(angleInput.Text, out angle);
             if (result)
             {
+                status.Text = "Moving to " + angle + "...";
                 var movement = kinect.TryToSetAngle(angle);
+                if(port != null && port.IsOpen)
+                {
+                    port.Write(angle + "");
+                    
+                }
             }
             else
             {
