@@ -31,12 +31,6 @@ namespace Kinesis
         private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 6);
         private int frameReduction = 2;
 
-        private Point SkeletonPointToScreen(SkeletonPoint skelpoint)
-        {
-            DepthImagePoint depthPoint = kinect.CoordinateMapper.MapSkeletonPointToDepthPoint(skelpoint, DepthImageFormat.Resolution640x480Fps30);
-            return new Point(depthPoint.X, depthPoint.Y);
-        }
-
         public MainWindow()
         {
             InitializeComponent();
@@ -55,22 +49,6 @@ namespace Kinesis
             }
         }
 
-        private void DisconnectPort(object sender, RoutedEventArgs e)
-        {
-            if(port != null)
-            {
-                port.Close();
-                status.Text = "No longer connected with " + port.PortName + ".";
-                port = null;
-                disconnectBtn.IsEnabled = false;
-                connectBtn.IsEnabled = true;
-            }
-            else
-            {
-                status.Text = "No longer connected with a Serial Device.";
-            }
-        }
-
         private void Window_Closed(object sender, EventArgs e)
         {
             kinect.Stop();
@@ -80,6 +58,49 @@ namespace Kinesis
             }
         }
 
+        private void KinectSensors_StatusChanged(object sender, StatusChangedEventArgs e)
+        {
+            if (KinectSensor.KinectSensors.Count == 0)
+            {
+                this.Close();
+                MessageBox.Show("Closing Kinesis because it couldn't find any Kinect Sensors",
+                    "No Kinect found");
+            }
+            else
+            {
+                kinect = KinectSensor.KinectSensors[0];
+                try
+                {
+                    kinect.Start();
+                    KinectSensor.KinectSensors.StatusChanged += KinectSensors_StatusChanged;
+                    kinect.SkeletonStream.Enable();
+                    kinect.ColorStream.Enable();
+                    kinect.SkeletonFrameReady += Kinect_SkeletonFrameReady;
+                    kinect.ColorFrameReady += Kinect_ColorFrameReady;
+                    angleInput.Text = "" + kinect.ElevationAngle;
+                }
+                catch (Exception e1)
+                {
+                    Close();
+                    MessageBox.Show(e1.Message, "Error!");
+                }
+            }
+        }
+
+        private void Kinect_ColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
+        {
+            ColorImageFrame frame = e.OpenColorImageFrame();
+
+            if (frame != null && frame.FrameNumber % frameReduction == 0)
+            {
+                byte[] pixelData = new byte[frame.PixelDataLength];
+                frame.CopyPixelDataTo(pixelData);
+
+                camera.Source = BitmapSource.Create(
+                    frame.Width, frame.Height, 96, 96, PixelFormats.Bgr32,
+                    null, pixelData, frame.Width * 4);
+            }
+        }
 
         private void Kinect_SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
@@ -124,7 +145,7 @@ namespace Kinesis
                 if (drawBrush != null)
                 {
                     Ellipse e = new Ellipse();
-                    Point p = SkeletonPointToScreen(joint.Position);
+                    Point p = kinect.SkeletonPointToScreen(joint.Position);
                     e.Fill = drawBrush;
                     e.Width = JointThickness;
                     e.Height = JointThickness;
@@ -132,6 +153,28 @@ namespace Kinesis
                     Canvas.SetTop(e, p.Y);
                     Canvas.SetLeft(e, p.X);
                 }
+            }
+        }
+
+        private void UpdateAngle(object sender, RoutedEventArgs e)
+        {
+            int angle = 0;
+            bool result = int.TryParse(angleInput.Text, out angle);
+            if (result)
+            {
+                status.Text = "Moving to " + angle + "...";
+                var movement = kinect.TryToSetAngle(angle);
+                if (port != null && port.IsOpen)
+                {
+                    port.Write(angle + "");
+
+                }
+            }
+            else
+            {
+                MessageBox.Show("Elevation angle must be an integer between " +
+                    kinect.MinElevationAngle + " and " + kinect.MaxElevationAngle,
+                    "Error on input");
             }
         }
 
@@ -145,55 +188,11 @@ namespace Kinesis
             {
                 if (elegible.Contains(j.JointType))
                 {
-                    selectedJoints.Add(j.JointType.ToString(), SkeletonPointToScreen(j.Position));
+                    selectedJoints.Add(j.JointType.ToString(), kinect.SkeletonPointToScreen(j.Position));
                 }
             }
 
             return selectedJoints;
-        }
-
-        private void Kinect_ColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
-        {
-            ColorImageFrame frame = e.OpenColorImageFrame();
-            
-            if(frame != null && frame.FrameNumber % frameReduction == 0)
-            {
-                byte[] pixelData = new byte[frame.PixelDataLength];
-                frame.CopyPixelDataTo(pixelData);
-
-                camera.Source = BitmapSource.Create(
-                    frame.Width, frame.Height, 96, 96, PixelFormats.Bgr32,
-                    null, pixelData, frame.Width * 4);
-            }
-        }
-        
-        private void KinectSensors_StatusChanged(object sender, StatusChangedEventArgs e)
-        {
-            if (KinectSensor.KinectSensors.Count == 0)
-            {
-                this.Close();
-                MessageBox.Show("Closing Kinesis because it couldn't find any Kinect Sensors",
-                    "No Kinect found");
-            }
-            else
-            {
-                kinect = KinectSensor.KinectSensors[0];
-                try
-                {
-                    kinect.Start();
-                    KinectSensor.KinectSensors.StatusChanged += KinectSensors_StatusChanged;
-                    kinect.SkeletonStream.Enable();
-                    kinect.ColorStream.Enable();
-                    kinect.SkeletonFrameReady += Kinect_SkeletonFrameReady;
-                    kinect.ColorFrameReady += Kinect_ColorFrameReady;
-                    angleInput.Text = "" + kinect.ElevationAngle;
-                }
-                catch(Exception e1)
-                {
-                    Close();
-                    MessageBox.Show(e1.Message, "Error!");
-                }
-            }
         }
 
         private void UpdatePortSelection(object sender, RoutedEventArgs e)
@@ -238,25 +237,19 @@ namespace Kinesis
             }
         }
 
-        private void UpdateAngle(object sender, RoutedEventArgs e)
+        private void DisconnectPort(object sender, RoutedEventArgs e)
         {
-            int angle = 0;
-            bool result = int.TryParse(angleInput.Text, out angle);
-            if (result)
+            if (port != null)
             {
-                status.Text = "Moving to " + angle + "...";
-                var movement = kinect.TryToSetAngle(angle);
-                if(port != null && port.IsOpen)
-                {
-                    port.Write(angle + "");
-                    
-                }
+                port.Close();
+                status.Text = "No longer connected with " + port.PortName + ".";
+                port = null;
+                disconnectBtn.IsEnabled = false;
+                connectBtn.IsEnabled = true;
             }
             else
             {
-                MessageBox.Show("Elevation angle must be an integer between " +
-                    kinect.MinElevationAngle + " and " + kinect.MaxElevationAngle,
-                    "Error on input");
+                status.Text = "No longer connected with a Serial Device.";
             }
         }
     }
@@ -275,6 +268,12 @@ namespace Kinesis
                 MessageBox.Show(e.Message, "Elevation error");
                 return false;
             }
+        }
+
+        public static Point SkeletonPointToScreen(this KinectSensor kinect, SkeletonPoint skelpoint)
+        {
+            DepthImagePoint depthPoint = kinect.CoordinateMapper.MapSkeletonPointToDepthPoint(skelpoint, DepthImageFormat.Resolution640x480Fps30);
+            return new Point(depthPoint.X, depthPoint.Y);
         }
     }
 
