@@ -22,6 +22,7 @@ namespace Kinesis
     /// </summary>
     public partial class MainWindow : Window
     {
+        //Define variables
         private KinectSensor kinect = null;
         private SerialPort port = null;
         private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromArgb(255, 68, 192, 68));
@@ -30,6 +31,8 @@ namespace Kinesis
         private readonly Pen trackedBonePen = new Pen(Brushes.Green, 6);
         private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 6);
         private int frameReduction = 2;
+        JointType[] elegible = {JointType.ElbowRight, JointType.ElbowLeft,
+                JointType.WristRight, JointType.WristLeft};
 
         public MainWindow()
         {
@@ -156,6 +159,21 @@ namespace Kinesis
             }
         }
 
+        private Dictionary<string, Point> filterJoints(Skeleton s)
+        {
+            Dictionary<string, Point> selectedJoints = new Dictionary<string, Point>();
+
+            foreach (Joint j in s.Joints)
+            {
+                if (elegible.Contains(j.JointType))
+                {
+                    selectedJoints.Add(j.JointType.ToString(), kinect.SkeletonPointToScreen(j.Position));
+                }
+            }
+
+            return selectedJoints;
+        }
+
         private void UpdateAngle(object sender, RoutedEventArgs e)
         {
             int angle = 0;
@@ -176,23 +194,6 @@ namespace Kinesis
                     kinect.MinElevationAngle + " and " + kinect.MaxElevationAngle,
                     "Error on input");
             }
-        }
-
-        private Dictionary<string,Point> filterJoints(Skeleton s)
-        {
-            Dictionary<string, Point> selectedJoints = new Dictionary<string, Point>();
-            JointType[] elegible = {JointType.ElbowRight, JointType.ElbowLeft,
-                JointType.WristRight, JointType.WristLeft};
-
-            foreach (Joint j in s.Joints)
-            {
-                if (elegible.Contains(j.JointType))
-                {
-                    selectedJoints.Add(j.JointType.ToString(), kinect.SkeletonPointToScreen(j.Position));
-                }
-            }
-
-            return selectedJoints;
         }
 
         private void UpdatePortSelection(object sender, RoutedEventArgs e)
