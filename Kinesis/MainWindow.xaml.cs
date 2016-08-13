@@ -42,7 +42,7 @@ namespace Kinesis
             InitializeComponent();
             status.Text = "Welcome to Kinesis!";
             serialMonitor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            serialMonitor.AppendText("Serial monitor:\n");
+            //serialMonitor.AppendText("Serial monitor:\n");
             KinectSensors_StatusChanged(null, null);
             UpdatePortSelection(null, null);
             connectBtn.Click += SetUpSerialConnection;
@@ -64,6 +64,10 @@ namespace Kinesis
                 port = null;
                 disconnectBtn.IsEnabled = false;
                 connectBtn.IsEnabled = true;
+            }
+            else
+            {
+                status.Text = "No longer connected with a Serial Device.";
             }
         }
 
@@ -91,6 +95,11 @@ namespace Kinesis
                     if(s.TrackingState == SkeletonTrackingState.Tracked)
                     {
                         drawJoints(s);
+                        if (port != null && port.IsOpen)
+                        {
+                            Dictionary<string, Point> points = filterJoints(s); 
+                            port.sendJointsData(points);
+                        }
                         break;
                     }
                 }
@@ -99,7 +108,6 @@ namespace Kinesis
 
         private void drawJoints(Skeleton skeleton)
         {
-            
             foreach (Joint joint in skeleton.Joints)
             {
                 Brush drawBrush = null;
@@ -127,7 +135,22 @@ namespace Kinesis
             }
         }
 
-       
+        private Dictionary<string,Point> filterJoints(Skeleton s)
+        {
+            Dictionary<string, Point> selectedJoints = new Dictionary<string, Point>();
+            JointType[] elegible = {JointType.ElbowRight, JointType.ElbowLeft,
+                JointType.WristRight, JointType.WristLeft};
+
+            foreach (Joint j in s.Joints)
+            {
+                if (elegible.Contains(j.JointType))
+                {
+                    selectedJoints.Add(j.JointType.ToString(), SkeletonPointToScreen(j.Position));
+                }
+            }
+
+            return selectedJoints;
+        }
 
         private void Kinect_ColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
         {
@@ -168,7 +191,7 @@ namespace Kinesis
                 catch(Exception e1)
                 {
                     Close();
-                    MessageBox.Show(e1.Message);
+                    MessageBox.Show(e1.Message, "Error!");
                 }
             }
         }
@@ -238,7 +261,7 @@ namespace Kinesis
         }
     }
 
-    public static class KinectExtensions
+    public static class KinesisExtensions
     {
         public static bool TryToSetAngle(this KinectSensor kinect, int angle)
         {
@@ -253,5 +276,19 @@ namespace Kinesis
                 return false;
             }
         }
+    }
+
+    public static class SerialPortExtensions
+    {
+        public static string sendJointsData(this SerialPort p, Dictionary<string, Point> points)
+        {
+            string message = "";
+            foreach (string key in points.Keys)
+            {
+                message += key + " " + points[key].X + " " + points[key].Y + "\n";
+            }
+            p.Write(message);
+            return p.ReadExisting();
+        }   
     }
 }
