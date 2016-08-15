@@ -25,8 +25,6 @@ namespace Kinesis
     {
         //Define variables
         private KinectSensor kinect = null;
-        private TcpClient socket = new TcpClient();
-        private int port = 0;
         private bool tcp = true;
         private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromArgb(255, 68, 192, 68));
         private readonly Brush inferredJointBrush = Brushes.Yellow;
@@ -34,8 +32,7 @@ namespace Kinesis
         private readonly Pen trackedBonePen = new Pen(Brushes.Green, 6);
         private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 6);
         private int frameReduction = 2;
-        JointType[] elegible = {JointType.ElbowRight, JointType.ElbowLeft,
-                JointType.WristRight, JointType.WristLeft};
+        private string[] elegible = {"ElbowRight", "ElbowLeft", "WristRight", "WristLeft"};
 
         public MainWindow()
         {
@@ -44,12 +41,32 @@ namespace Kinesis
             server.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             KinectSensors_StatusChanged(null, null);
             angleBtn.Click += UpdateAngle;
+            requestBtn.Click += RequestPermittedJoints;
         }
 
         private void Window_Closed(object sender, EventArgs e)
         {
             if(kinect != null)
                 kinect.Stop();
+        }
+
+        private void RequestPermittedJoints(object sender, RoutedEventArgs e)
+        {
+            int port = 0;
+            bool ok = int.TryParse(portInput.Text, out port);
+            if(ok)
+            {
+                TcpClient socket = new TcpClient(ipInput.Text, port);
+                NetworkStream stream = socket.GetStream();
+
+                byte[] response = new byte[1024];
+
+                stream.Read(response, 0, response.Length);
+                MessageBox.Show(Encoding.ASCII.GetString(response));
+
+                stream.Close();
+                socket.Close();
+            }
         }
 
         private void KinectSensors_StatusChanged(object sender, StatusChangedEventArgs e)
@@ -98,17 +115,18 @@ namespace Kinesis
 
         private void SendDataToServer(Skeleton s)
         {
+            int port = 0;
             bool ok = int.TryParse(portInput.Text, out port);
             if(ok)
             {
-                socket = new TcpClient(ipInput.Text, port);
+                TcpClient socket = new TcpClient(ipInput.Text, port);
                 NetworkStream stream = socket.GetStream();
                 Dictionary<string, Point> joints = filterJoints(s);
                 string content = "";
 
                 foreach(string key in joints.Keys)
                 {
-                    content += key + " " + joints[key].X + " " + joints[key].Y + ";";
+                    content += "{:type=>\"" + key + "\", :x=>" + joints[key].X + ", :y=>" + joints[key].Y + "};";
                 }
 
                 byte[] byteForm = Encoding.ASCII.GetBytes(content);
@@ -178,7 +196,7 @@ namespace Kinesis
 
             foreach (Joint j in s.Joints)
             {
-                if (elegible.Contains(j.JointType))
+                if (elegible.Contains(j.JointType.ToString()))
                 {
                     selectedJoints.Add(j.JointType.ToString(), kinect.SkeletonPointToScreen(j.Position));
                 }
