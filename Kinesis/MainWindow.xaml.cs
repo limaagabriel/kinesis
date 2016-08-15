@@ -13,7 +13,8 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Microsoft.Kinect;
-using System.IO.Ports;
+using System.Net;
+using System.Net.Sockets;
 
 namespace Kinesis
 {
@@ -24,7 +25,9 @@ namespace Kinesis
     {
         //Define variables
         private KinectSensor kinect = null;
-        private SerialPort port = null;
+        private TcpClient socket = new TcpClient();
+        private int port = 0;
+        private bool tcp = true;
         private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromArgb(255, 68, 192, 68));
         private readonly Brush inferredJointBrush = Brushes.Yellow;
         private const double JointThickness = 15;
@@ -38,27 +41,15 @@ namespace Kinesis
         {
             InitializeComponent();
             status.Text = "Welcome to Kinesis!";
-            serialMonitor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            //serialMonitor.AppendText("Serial monitor:\n");
+            server.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             KinectSensors_StatusChanged(null, null);
-            UpdatePortSelection(null, null);
-            connectBtn.Click += SetUpSerialConnection;
-            portUpdate.Click += UpdatePortSelection;
-            disconnectBtn.Click += DisconnectPort;
             angleBtn.Click += UpdateAngle;
-            if(port == null)
-            {
-                disconnectBtn.IsEnabled = false;
-            }
         }
 
         private void Window_Closed(object sender, EventArgs e)
         {
-            kinect.Stop();
-            if (port != null)
-            {
-                port.Close();
-            }
+            if(kinect != null)
+                kinect.Stop();
         }
 
         private void KinectSensors_StatusChanged(object sender, StatusChangedEventArgs e)
@@ -105,6 +96,28 @@ namespace Kinesis
             }
         }
 
+        private void SendDataToServer(Skeleton s)
+        {
+            bool ok = int.TryParse(portInput.Text, out port);
+            if(ok)
+            {
+                socket = new TcpClient(ipInput.Text, port);
+                NetworkStream stream = socket.GetStream();
+                Dictionary<string, Point> joints = filterJoints(s);
+                string content = "";
+
+                foreach(string key in joints.Keys)
+                {
+                    content += key + " " + joints[key].X + " " + joints[key].Y + ";";
+                }
+
+                byte[] byteForm = Encoding.ASCII.GetBytes(content);
+                stream.Write(byteForm, 0, byteForm.Length);
+                stream.Close();
+                socket.Close();
+            }
+        }
+
         private void Kinect_SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
             SkeletonFrame frame = e.OpenSkeletonFrame();
@@ -114,15 +127,15 @@ namespace Kinesis
                 Skeleton[] trackedSkeletons = new Skeleton[frame.SkeletonArrayLength];
                 frame.CopySkeletonDataTo(trackedSkeletons);
 
-                foreach(Skeleton s in trackedSkeletons)
+                foreach (Skeleton s in trackedSkeletons)
                 {
-                    if(s.TrackingState == SkeletonTrackingState.Tracked)
+                    if (s.TrackingState == SkeletonTrackingState.Tracked)
                     {
                         drawJoints(s);
-                        if (port != null && port.IsOpen)
+                        if(tcp)
                         {
-                            Dictionary<string, Point> points = filterJoints(s); 
-                            port.sendJointsData(points);
+                            SendDataToServer(s);
+                            tcp = false;
                         }
                         break;
                     }
@@ -182,11 +195,6 @@ namespace Kinesis
             {
                 status.Text = "Moving to " + angle + "...";
                 var movement = kinect.TryToSetAngle(angle);
-                if (port != null && port.IsOpen)
-                {
-                    port.Write(angle + "");
-
-                }
             }
             else
             {
@@ -195,66 +203,7 @@ namespace Kinesis
                     "Error on input");
             }
         }
-
-        private void UpdatePortSelection(object sender, RoutedEventArgs e)
-        {
-            portInput.Items.Clear();
-            foreach (string serialPort in SerialPort.GetPortNames())
-            {
-                portInput.Items.Add(serialPort);
-            }
-        }
-
-        private void SetUpSerialConnection(object sender, RoutedEventArgs e)
-        {
-            if (portInput.SelectedIndex >= 0)
-            {
-                try
-                {
-                    string selected = (string)portInput.Items.GetItemAt(portInput.SelectedIndex);
-                    if (SerialPort.GetPortNames().Contains(selected))
-                    {
-                        if (port != null && port.IsOpen)
-                        {
-                            port.Close();
-                        }
-                        port = new SerialPort(selected, 9600);
-                        port.Open();
-                        disconnectBtn.IsEnabled = true;
-                        connectBtn.IsEnabled = false;
-
-                        status.Text = "Connected to " + port.PortName + " at " + port.BaudRate + "!";
-                    }
-                    else
-                    {
-                        throw new Exception("I'm not going to connect with this...");
-                    }
-                }
-                catch (Exception e2)
-                {
-                    MessageBox.Show(e2.Message, "Connection Error");
-                }
-                
-            }
-        }
-
-        private void DisconnectPort(object sender, RoutedEventArgs e)
-        {
-            if (port != null)
-            {
-                port.Close();
-                status.Text = "No longer connected with " + port.PortName + ".";
-                port = null;
-                disconnectBtn.IsEnabled = false;
-                connectBtn.IsEnabled = true;
-            }
-            else
-            {
-                status.Text = "No longer connected with a Serial Device.";
-            }
-        }
     }
-
     public static class KinesisExtensions
     {
         public static bool TryToSetAngle(this KinectSensor kinect, int angle)
@@ -276,19 +225,5 @@ namespace Kinesis
             DepthImagePoint depthPoint = kinect.CoordinateMapper.MapSkeletonPointToDepthPoint(skelpoint, DepthImageFormat.Resolution640x480Fps30);
             return new Point(depthPoint.X, depthPoint.Y);
         }
-    }
-
-    public static class SerialPortExtensions
-    {
-        public static string sendJointsData(this SerialPort p, Dictionary<string, Point> points)
-        {
-            string message = "";
-            foreach (string key in points.Keys)
-            {
-                message += key + " " + points[key].X + " " + points[key].Y + "\n";
-            }
-            p.Write(message);
-            return p.ReadExisting();
-        }   
     }
 }
