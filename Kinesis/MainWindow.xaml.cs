@@ -15,6 +15,7 @@ using System.Windows.Shapes;
 using Microsoft.Kinect;
 using System.Net;
 using System.Net.Sockets;
+using System.IO.Ports;
 
 namespace Kinesis
 {
@@ -42,12 +43,23 @@ namespace Kinesis
             KinectSensors_StatusChanged(null, null);
             angleBtn.Click += UpdateAngle;
             requestBtn.Click += RequestPermittedJoints;
+            updatePorts.Click += UpdateSerialSelection;
+            UpdateSerialSelection(null, null);
         }
 
         private void Window_Closed(object sender, EventArgs e)
         {
             if(kinect != null)
                 kinect.Stop();
+        }
+
+        private void UpdateSerialSelection(object sender, RoutedEventArgs e)
+        {
+            serialMonitor.Text = "";
+            foreach(string port in SerialPort.GetPortNames())
+            {
+                serialMonitor.AppendText(port + "\n");
+            }
         }
 
         private void RequestPermittedJoints(object sender, RoutedEventArgs e)

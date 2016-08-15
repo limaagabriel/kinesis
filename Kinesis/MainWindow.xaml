@@ -14,12 +14,13 @@
         <Canvas Name="canvas">
         </Canvas>
         <TextBox x:Name="status" Height="25" TextWrapping="Wrap" Text="" Margin="0,640,0,0" Grid.ColumnSpan="2" BorderThickness="0"/>
-        <TextBox x:Name="server" TextWrapping="Wrap" Text="" Margin="271,459,10,110" BorderThickness="1" Grid.Column="1"/>
+        <TextBox x:Name="serialMonitor" TextWrapping="Wrap" Text="" Margin="271,459,10,110" BorderThickness="1" Grid.Column="1"/>
 
         <Image Name="camera" Margin="10,10,10,215" Grid.Column="1"/>
         <TextBox x:Name="angleInput" HorizontalAlignment="Left" Height="23" Margin="271,601,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" Grid.Column="1"/>
         <Button x:Name="angleBtn" Content="Set Angle" HorizontalAlignment="Left" Margin="423,604,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="20"/>
         <Button x:Name="requestBtn" Content="Request permitted joints" HorizontalAlignment="Left" Margin="5,487,0,0" VerticalAlignment="Top" Width="250" Grid.Column="1" Height="24"/>
+        <Button x:Name="updatePorts" Content="Update Serial Port Listing" HorizontalAlignment="Left" Margin="5,516,0,0" VerticalAlignment="Top" Width="250" Grid.Column="1" Height="24"/>
 
         <TextBox x:Name="ipInput" HorizontalAlignment="Left" Height="23" Margin="5,459,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" Grid.Column="1" Text="localhost"/>
 
