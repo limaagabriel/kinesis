@@ -40,7 +40,7 @@ namespace Kinesis
             InitializeComponent();
             status.Text = "Welcome to Kinesis!";
             serialMonitor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            //KinectSensors_StatusChanged(null, null);
+            KinectSensors_StatusChanged(null, null);
             angleBtn.Click += UpdateAngle;
             requestBtn.Click += RequestPermittedJoints;
             updatePorts.Click += UpdateSerialSelection;
