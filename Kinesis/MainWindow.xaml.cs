@@ -138,7 +138,7 @@ namespace Kinesis
 
                 foreach(string key in joints.Keys)
                 {
-                    content += "{:type=>\"" + key + "\", :x=>" + joints[key].X + ", :y=>" + joints[key].Y + "};";
+                    content += "{type:\"" + key + "\", x:" + joints[key].X + ", y:" + joints[key].Y + "};";
                 }
 
                 byte[] byteForm = Encoding.ASCII.GetBytes(content);
