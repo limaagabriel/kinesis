@@ -26,19 +26,22 @@ namespace Kinesis
     {
         //Define variables
         private KinectSensor kinect = null;
-        private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromArgb(255, 68, 192, 68));
-        private readonly Brush inferredJointBrush = Brushes.Yellow;
+        private readonly Brush inferredJointBrush = new SolidColorBrush(Color.FromRgb(52, 52, 52));
+        private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromRgb(237, 84, 52));
+        private readonly Brush trackedSkeletonBackground = new SolidColorBrush(Color.FromRgb(146, 206, 26));
+        //private readonly Brush trackedSkeletonBackground = new SolidColorBrush(Color.FromRgb(140, 205, 209));
         private readonly double JointThickness = 15;
-        private readonly Pen trackedBonePen = new Pen(Brushes.Green, 6);
-        private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 6);
-        private readonly int frameReduction = 1;
+        private readonly double boneThickness = 10;
+        private readonly Brush trackedBoneBrush = new SolidColorBrush(Color.FromRgb(255, 0, 255));
+        private readonly Brush inferredBoneBrush = Brushes.Yellow;
+        private readonly int frameReduction = 2;
         private StateFlow flow = new StateFlow();
 
         public MainWindow()
         {
             InitializeComponent();
             status.Text = "Welcome to Kinesis!";
-            StatusChanged(null, null);
+            
             angleBtn.Click += UpdateAngle;
 
             flow.subscribe((state) =>
@@ -66,8 +69,7 @@ namespace Kinesis
 
                 return null;
             });
-
-            flow.dispatch("NO_KINECT_ATTACHED");
+            StatusChanged(null, null);
         }
 
         private void Window_Closed(object sender, EventArgs e)
@@ -83,6 +85,7 @@ namespace Kinesis
                 try
                 {
                     kinect = KinectSensor.KinectSensors[0];
+                    
                     kinect.Start();
                     KinectSensor.KinectSensors.StatusChanged += StatusChanged;
                     kinect.SkeletonStream.Enable();
@@ -94,9 +97,12 @@ namespace Kinesis
                 }
                 catch (Exception e1)
                 {
-                    Close();
                     MessageBox.Show(e1.Message, "Error!");
                 }
+            }
+            else
+            {
+                flow.dispatch("NO_KINECT_ATTACHED");
             }
         }
 
@@ -128,7 +134,7 @@ namespace Kinesis
                 {
                     if (s.TrackingState == SkeletonTrackingState.Tracked)
                     {
-                        handleJoints(s);
+                        handleSkeleton(s);
                         break;
                     }
                 }
@@ -137,22 +143,25 @@ namespace Kinesis
 
         private void handleJoints(Skeleton skeleton)
         {
-            int port = 0;
+            //int port = 0;
             string content = "";
-            bool ok = int.TryParse(portInput.Text, out port);
+            //bool ok = int.TryParse(portInput.Text, out port);
 
-            TcpClient socket = null;
-            NetworkStream stream = null;
+            //TcpClient socket = null;
+            //NetworkStream stream = null;
 
-            if (ok)
-            {
-                try
-                {
-                    socket = new TcpClient(ipInput.Text, port);
-                    stream = socket.GetStream();
-                }
-                catch(Exception e) {}
-            }
+            //if (ok)
+            //{
+            //    try
+            //    {
+            //        socket = new TcpClient(ipInput.Text, port);
+            //        stream = socket.GetStream();
+            //    }
+            //    catch(Exception e) {
+            //        socket = null;
+            //        status.Text = "aqui";
+            //    }
+            //}
 
             foreach (Joint joint in skeleton.Joints)
             {
@@ -182,13 +191,13 @@ namespace Kinesis
                 }
             }
             
-            if(ok && socket != null)
-            {
-                byte[] byteForm = Encoding.ASCII.GetBytes(content);
-                stream.Write(byteForm, 0, byteForm.Length);
-                stream.Close();
-                socket.Close();
-            }
+            //if(ok && socket != null)
+            //{
+            //    byte[] byteForm = Encoding.ASCII.GetBytes(content);
+            //    stream.Write(byteForm, 0, byteForm.Length);
+            //    stream.Close();
+            //    socket.Close();
+            //}
         }
 
         private void UpdateAngle(object sender, RoutedEventArgs e)
@@ -206,6 +215,76 @@ namespace Kinesis
                     kinect.MinElevationAngle + " and " + kinect.MaxElevationAngle,
                     "Error on input");
             }
+        }
+
+        private void handleSkeleton(Skeleton skeleton)
+        {
+            // Render Torso
+            this.DrawBone(skeleton, JointType.Head, JointType.ShoulderCenter);
+            this.DrawBone(skeleton, JointType.ShoulderCenter, JointType.ShoulderLeft);
+            this.DrawBone(skeleton, JointType.ShoulderCenter, JointType.ShoulderRight);
+            this.DrawBone(skeleton, JointType.ShoulderCenter, JointType.Spine);
+            this.DrawBone(skeleton, JointType.Spine, JointType.HipCenter);
+            this.DrawBone(skeleton, JointType.HipCenter, JointType.HipLeft);
+            this.DrawBone(skeleton, JointType.HipCenter, JointType.HipRight);
+
+            // Left Arm
+            this.DrawBone(skeleton, JointType.ShoulderLeft, JointType.ElbowLeft);
+            this.DrawBone(skeleton, JointType.ElbowLeft, JointType.WristLeft);
+            this.DrawBone(skeleton, JointType.WristLeft, JointType.HandLeft);
+
+            // Right Arm
+            this.DrawBone(skeleton, JointType.ShoulderRight, JointType.ElbowRight);
+            this.DrawBone(skeleton, JointType.ElbowRight, JointType.WristRight);
+            this.DrawBone(skeleton, JointType.WristRight, JointType.HandRight);
+
+            // Left Leg
+            this.DrawBone(skeleton, JointType.HipLeft, JointType.KneeLeft);
+            this.DrawBone(skeleton, JointType.KneeLeft, JointType.AnkleLeft);
+            this.DrawBone(skeleton, JointType.AnkleLeft, JointType.FootLeft);
+
+            // Right Leg
+            this.DrawBone(skeleton, JointType.HipRight, JointType.KneeRight);
+            this.DrawBone(skeleton, JointType.KneeRight, JointType.AnkleRight);
+            this.DrawBone(skeleton, JointType.AnkleRight, JointType.FootRight);
+
+            handleJoints(skeleton);
+        }
+
+        private void DrawBone(Skeleton skeleton, JointType jointType0, JointType jointType1)
+        {
+            Joint joint0 = skeleton.Joints[jointType0];
+            Joint joint1 = skeleton.Joints[jointType1];
+
+            // If we can't find either of these joints, exit
+            if (joint0.TrackingState == JointTrackingState.NotTracked ||
+                joint1.TrackingState == JointTrackingState.NotTracked)
+            {
+                return;
+            }
+
+            // Don't draw if both points are inferred
+            if (joint0.TrackingState == JointTrackingState.Inferred &&
+                joint1.TrackingState == JointTrackingState.Inferred)
+            {
+                return;
+            }
+
+            // We assume all drawn bones are inferred unless BOTH joints are tracked
+            Brush drawBrush = this.inferredBoneBrush;
+            if (joint0.TrackingState == JointTrackingState.Tracked && joint1.TrackingState == JointTrackingState.Tracked)
+            {
+                drawBrush = this.trackedBoneBrush;
+            }
+            Line line = new Line();
+            line.X1 = joint0.Position.X;
+            line.X2 = joint1.Position.X;
+            line.Y1 = joint0.Position.Y;
+            line.Y2 = joint1.Position.Y;
+
+            line.StrokeThickness = boneThickness;
+            line.Fill = drawBrush;
+            canvas.Children.Add(line);
         }
     }
     public static class KinesisExtensions
