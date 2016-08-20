@@ -28,8 +28,6 @@ namespace Kinesis
         private KinectSensor kinect = null;
         private readonly Brush inferredJointBrush = new SolidColorBrush(Color.FromRgb(52, 52, 52));
         private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromRgb(237, 84, 52));
-        private readonly Brush trackedSkeletonBackground = new SolidColorBrush(Color.FromRgb(146, 206, 26));
-        //private readonly Brush trackedSkeletonBackground = new SolidColorBrush(Color.FromRgb(140, 205, 209));
         private readonly double JointThickness = 15;
         private readonly double boneThickness = 10;
         private readonly Brush trackedBoneBrush = new SolidColorBrush(Color.FromRgb(255, 0, 255));
