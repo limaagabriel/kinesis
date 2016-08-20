@@ -33,16 +33,14 @@ namespace Kinesis
         private readonly Pen trackedBonePen = new Pen(Brushes.Green, 6);
         private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 6);
         private int frameReduction = 2;
-        private string[] elegible = {"ElbowRight", "ElbowLeft", "WristRight", "WristLeft"};
 
         public MainWindow()
         {
             InitializeComponent();
             status.Text = "Welcome to Kinesis!";
             serialMonitor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            KinectSensors_StatusChanged(null, null);
+            //KinectSensors_StatusChanged(null, null);
             angleBtn.Click += UpdateAngle;
-            requestBtn.Click += RequestPermittedJoints;
             updatePorts.Click += UpdateSerialSelection;
             UpdateSerialSelection(null, null);
         }
@@ -62,24 +60,6 @@ namespace Kinesis
             }
         }
 
-        private void RequestPermittedJoints(object sender, RoutedEventArgs e)
-        {
-            int port = 0;
-            bool ok = int.TryParse(portInput.Text, out port);
-            if(ok)
-            {
-                TcpClient socket = new TcpClient(ipInput.Text, port);
-                NetworkStream stream = socket.GetStream();
-
-                byte[] response = new byte[1024];
-
-                stream.Read(response, 0, response.Length);
-                MessageBox.Show(Encoding.ASCII.GetString(response));
-
-                stream.Close();
-                socket.Close();
-            }
-        }
 
         private void KinectSensors_StatusChanged(object sender, StatusChangedEventArgs e)
         {
@@ -125,29 +105,6 @@ namespace Kinesis
             }
         }
 
-        private void SendDataToServer(Skeleton s)
-        {
-            int port = 0;
-            bool ok = int.TryParse(portInput.Text, out port);
-            if(ok)
-            {
-                TcpClient socket = new TcpClient(ipInput.Text, port);
-                NetworkStream stream = socket.GetStream();
-                Dictionary<string, Point> joints = filterJoints(s);
-                string content = "";
-
-                foreach(string key in joints.Keys)
-                {
-                    content += "{type:\"" + key + "\", x:" + joints[key].X + ", y:" + joints[key].Y + "};";
-                }
-
-                byte[] byteForm = Encoding.ASCII.GetBytes(content);
-                stream.Write(byteForm, 0, byteForm.Length);
-                stream.Close();
-                socket.Close();
-            }
-        }
-
         private void Kinect_SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
             SkeletonFrame frame = e.OpenSkeletonFrame();
@@ -161,20 +118,26 @@ namespace Kinesis
                 {
                     if (s.TrackingState == SkeletonTrackingState.Tracked)
                     {
-                        drawJoints(s);
-                        if(tcp)
-                        {
-                            SendDataToServer(s);
-                            tcp = false;
-                        }
+                        handleJoints(s);
                         break;
                     }
                 }
             }
         }
 
-        private void drawJoints(Skeleton skeleton)
+        private void handleJoints(Skeleton skeleton)
         {
+            int port = 0;
+            string content = "";
+            bool ok = int.TryParse(portInput.Text, out port);
+            TcpClient socket = null;
+            NetworkStream stream = null;
+            if (ok)
+            {
+                socket = new TcpClient(ipInput.Text, port);
+                stream = socket.GetStream();
+            }
+
             foreach (Joint joint in skeleton.Joints)
             {
                 Brush drawBrush = null;
@@ -198,23 +161,18 @@ namespace Kinesis
                     canvas.Children.Add(e);
                     Canvas.SetTop(e, p.Y);
                     Canvas.SetLeft(e, p.X);
+                    content += "{type:\"" + joint.JointType.ToString() +
+                        "\", x:" + p.X + ", y:" + p.Y + "};";
                 }
             }
-        }
-
-        private Dictionary<string, Point> filterJoints(Skeleton s)
-        {
-            Dictionary<string, Point> selectedJoints = new Dictionary<string, Point>();
-
-            foreach (Joint j in s.Joints)
+            
+            if(ok && socket != null)
             {
-                if (elegible.Contains(j.JointType.ToString()))
-                {
-                    selectedJoints.Add(j.JointType.ToString(), kinect.SkeletonPointToScreen(j.Position));
-                }
+                byte[] byteForm = Encoding.ASCII.GetBytes(content);
+                stream.Write(byteForm, 0, byteForm.Length);
+                stream.Close();
+                socket.Close();
             }
-
-            return selectedJoints;
         }
 
         private void UpdateAngle(object sender, RoutedEventArgs e)
