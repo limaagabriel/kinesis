@@ -26,23 +26,48 @@ namespace Kinesis
     {
         //Define variables
         private KinectSensor kinect = null;
-        private bool tcp = true;
         private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromArgb(255, 68, 192, 68));
         private readonly Brush inferredJointBrush = Brushes.Yellow;
-        private const double JointThickness = 15;
+        private readonly double JointThickness = 15;
         private readonly Pen trackedBonePen = new Pen(Brushes.Green, 6);
         private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 6);
-        private int frameReduction = 2;
+        private readonly int frameReduction = 1;
+        private StateFlow flow = new StateFlow();
 
         public MainWindow()
         {
             InitializeComponent();
             status.Text = "Welcome to Kinesis!";
-            serialMonitor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            //KinectSensors_StatusChanged(null, null);
+            StatusChanged(null, null);
             angleBtn.Click += UpdateAngle;
-            updatePorts.Click += UpdateSerialSelection;
-            UpdateSerialSelection(null, null);
+
+            flow.subscribe((state) =>
+            {
+                switch(state)
+                {
+                    case "NO_KINECT_ATTACHED":
+                        angleBtn.IsEnabled = false;
+                        BitmapImage bitmap = new BitmapImage();
+                        bitmap.BeginInit();
+                        bitmap.UriSource = new Uri("pack://siteoforigin:,,,/Resources/Logo.png");
+                        bitmap.EndInit();
+                        camera.Stretch = Stretch.Fill;
+                        camera.Source = bitmap;
+                        status.Text = "State: NO_KINECT_ATTACHED";
+                        break;
+                    case "KINECT_ATTACHED":
+                        angleBtn.IsEnabled = true;
+                        status.Text = "State: KINECT_ATTACHED";
+                        break;
+                    default:
+                        status.Text = "Invalid state";
+                        break;
+                }
+
+                return null;
+            });
+
+            flow.dispatch("NO_KINECT_ATTACHED");
         }
 
         private void Window_Closed(object sender, EventArgs e)
@@ -51,36 +76,21 @@ namespace Kinesis
                 kinect.Stop();
         }
 
-        private void UpdateSerialSelection(object sender, RoutedEventArgs e)
+        private void StatusChanged(object sender, StatusChangedEventArgs e)
         {
-            serialMonitor.Text = "";
-            foreach(string port in SerialPort.GetPortNames())
+            if(KinectSensor.KinectSensors.Count > 0)
             {
-                serialMonitor.AppendText(port + "\n");
-            }
-        }
-
-
-        private void KinectSensors_StatusChanged(object sender, StatusChangedEventArgs e)
-        {
-            if (KinectSensor.KinectSensors.Count == 0)
-            {
-                this.Close();
-                MessageBox.Show("Closing Kinesis because it couldn't find any Kinect Sensors",
-                    "No Kinect found");
-            }
-            else
-            {
-                kinect = KinectSensor.KinectSensors[0];
                 try
                 {
+                    kinect = KinectSensor.KinectSensors[0];
                     kinect.Start();
-                    KinectSensor.KinectSensors.StatusChanged += KinectSensors_StatusChanged;
+                    KinectSensor.KinectSensors.StatusChanged += StatusChanged;
                     kinect.SkeletonStream.Enable();
                     kinect.ColorStream.Enable();
-                    kinect.SkeletonFrameReady += Kinect_SkeletonFrameReady;
-                    kinect.ColorFrameReady += Kinect_ColorFrameReady;
+                    kinect.SkeletonFrameReady += SkeletonFrameReady;
+                    kinect.ColorFrameReady += ColorFrameReady;
                     angleInput.Text = "" + kinect.ElevationAngle;
+                    flow.dispatch("KINECT_ATTACHED");
                 }
                 catch (Exception e1)
                 {
@@ -90,7 +100,7 @@ namespace Kinesis
             }
         }
 
-        private void Kinect_ColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
+        private void ColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
         {
             ColorImageFrame frame = e.OpenColorImageFrame();
 
@@ -105,7 +115,7 @@ namespace Kinesis
             }
         }
 
-        private void Kinect_SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
+        private void SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
             SkeletonFrame frame = e.OpenSkeletonFrame();
             canvas.Children.Clear();
@@ -130,12 +140,18 @@ namespace Kinesis
             int port = 0;
             string content = "";
             bool ok = int.TryParse(portInput.Text, out port);
+
             TcpClient socket = null;
             NetworkStream stream = null;
+
             if (ok)
             {
-                socket = new TcpClient(ipInput.Text, port);
-                stream = socket.GetStream();
+                try
+                {
+                    socket = new TcpClient(ipInput.Text, port);
+                    stream = socket.GetStream();
+                }
+                catch(Exception e) {}
             }
 
             foreach (Joint joint in skeleton.Joints)
