@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -39,12 +39,13 @@ namespace Kinesis
         {
             InitializeComponent();
             status.Text = "Welcome to Kinesis!";
-            
+            KinectSensor.KinectSensors.StatusChanged += StatusChanged;
             angleBtn.Click += UpdateAngle;
 
             flow.subscribe((state) =>
             {
-                switch(state)
+                status.Text = "State: " + state;
+                switch (state)
                 {
                     case "NO_KINECT_ATTACHED":
                         angleBtn.IsEnabled = false;
@@ -54,11 +55,9 @@ namespace Kinesis
                         bitmap.EndInit();
                         camera.Stretch = Stretch.Fill;
                         camera.Source = bitmap;
-                        status.Text = "State: NO_KINECT_ATTACHED";
                         break;
                     case "KINECT_ATTACHED":
                         angleBtn.IsEnabled = true;
-                        status.Text = "State: KINECT_ATTACHED";
                         break;
                     default:
                         status.Text = "Invalid state";
@@ -67,7 +66,9 @@ namespace Kinesis
 
                 return null;
             });
-            StatusChanged(null, null);
+
+            if(kinect == null || !kinect.IsRunning)
+                StatusChanged(null, null);
         }
 
         private void Window_Closed(object sender, EventArgs e)
@@ -85,7 +86,7 @@ namespace Kinesis
                     kinect = KinectSensor.KinectSensors[0];
                     
                     kinect.Start();
-                    KinectSensor.KinectSensors.StatusChanged += StatusChanged;
+                    
                     kinect.SkeletonStream.Enable();
                     kinect.ColorStream.Enable();
                     kinect.SkeletonFrameReady += SkeletonFrameReady;
@@ -95,7 +96,8 @@ namespace Kinesis
                 }
                 catch (Exception e1)
                 {
-                    MessageBox.Show(e1.Message, "Error!");
+                    flow.dispatch("NO_KINECT_ATTACHED");
+                    status.Text = "Error: " + e1.Message;
                 }
             }
             else
@@ -122,6 +124,7 @@ namespace Kinesis
         private void SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
             SkeletonFrame frame = e.OpenSkeletonFrame();
+            bool hasSkeleton = false;
             canvas.Children.Clear();
             if (frame != null)
             {
@@ -132,35 +135,63 @@ namespace Kinesis
                 {
                     if (s.TrackingState == SkeletonTrackingState.Tracked)
                     {
-                        handleSkeleton(s);
+                        int port = 0;
+                        int.TryParse(portInput.Text, out port);
+
+                        DataGroup d = new DataGroup(port, ipInput.Text, s);
+
+                        drawJoints(s);
+                        Thread socketThread = new Thread((object data) => {
+                            DataGroup group = (DataGroup) data;
+
+                            sendJointsData(group.getSkeleton(),
+                                group.getHost(),
+                                group.getPort());
+                        });
+                        socketThread.Start(d);
+                        hasSkeleton = true;
                         break;
                     }
                 }
+
+                if(hasSkeleton)
+                    trackingLabel.Visibility = Visibility.Collapsed;
+                else
+                    trackingLabel.Visibility = Visibility.Visible;
             }
         }
 
-        private void handleJoints(Skeleton skeleton)
+        private void sendJointsData(Skeleton s, string host, int port)
         {
-            //int port = 0;
-            string content = "";
-            //bool ok = int.TryParse(portInput.Text, out port);
+                try
+                {
+                    string content = "SKELETON_FRAME;";
+                    TcpClient socket = new TcpClient(host, port);
+                    NetworkStream stream = socket.GetStream();
 
-            //TcpClient socket = null;
-            //NetworkStream stream = null;
+                    foreach(Joint j in s.Joints)
+                    {
+                        Point p = kinect.SkeletonPointToScreen(j.Position);
+                        content += j.JointType.ToString() + "," + p.X + "," + p.Y + ";";
+                    }
 
-            //if (ok)
-            //{
-            //    try
-            //    {
-            //        socket = new TcpClient(ipInput.Text, port);
-            //        stream = socket.GetStream();
-            //    }
-            //    catch(Exception e) {
-            //        socket = null;
-            //        status.Text = "aqui";
-            //    }
-            //}
+                    byte[] toSend = Encoding.ASCII.GetBytes(content);
+                    stream.Write(toSend, 0, toSend.Length);
 
+                    byte[] toReceive = new byte[1024];
+                    stream.Read(toReceive, 0, toReceive.Length);
+
+                    stream.Close();
+                    socket.Close();
+                }
+                catch(Exception e)
+                {
+                    MessageBox.Show(e.Message, "Error on server connection");
+                }
+        }
+
+        private void drawJoints(Skeleton skeleton)
+        {
             foreach (Joint joint in skeleton.Joints)
             {
                 Brush drawBrush = null;
@@ -184,18 +215,9 @@ namespace Kinesis
                     canvas.Children.Add(e);
                     Canvas.SetTop(e, p.Y);
                     Canvas.SetLeft(e, p.X);
-                    content += "{type:\"" + joint.JointType.ToString() +
-                        "\", x:" + p.X + ", y:" + p.Y + "};";
+                    
                 }
             }
-            
-            //if(ok && socket != null)
-            //{
-            //    byte[] byteForm = Encoding.ASCII.GetBytes(content);
-            //    stream.Write(byteForm, 0, byteForm.Length);
-            //    stream.Close();
-            //    socket.Close();
-            //}
         }
 
         private void UpdateAngle(object sender, RoutedEventArgs e)
@@ -246,7 +268,7 @@ namespace Kinesis
             this.DrawBone(skeleton, JointType.KneeRight, JointType.AnkleRight);
             this.DrawBone(skeleton, JointType.AnkleRight, JointType.FootRight);
 
-            handleJoints(skeleton);
+            drawJoints(skeleton);
         }
 
         private void DrawBone(Skeleton skeleton, JointType jointType0, JointType jointType1)
