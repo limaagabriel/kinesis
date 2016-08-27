@@ -188,7 +188,7 @@ namespace Kinesis
                 {
                     if (s.TrackingState == SkeletonTrackingState.Tracked)
                     {
-                        drawJoints(s);
+                        drawBody(s);
                         if(port != null && port.IsOpen)
                         {
                             Thread teleactive = new Thread(new ParameterizedThreadStart((object o) => {
@@ -260,7 +260,7 @@ namespace Kinesis
             }
         }
 
-        private void handleSkeleton(Skeleton skeleton)
+        private void drawBody(Skeleton skeleton)
         {
             // Render Torso
             this.DrawBone(skeleton, JointType.Head, JointType.ShoulderCenter);
