@@ -8,26 +8,25 @@
         Title="Kinesis" Width="1024" Height="700" WindowStartupLocation="CenterScreen" Icon="pack://siteoforigin:,,,/../../Resources/Logo.png" >
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="84*"/>
-            <ColumnDefinition Width="43*"/>
+            <ColumnDefinition Width="157*"/>
+            <ColumnDefinition Width="97*"/>
         </Grid.ColumnDefinitions>
 
         <Canvas x:Name="canvas" Margin="0,0,0,44"/>
 
         <TextBox x:Name="status" TextWrapping="Wrap" Text="" Margin="10,642,0,2" BorderThickness="0" IsEnabled="False" Grid.Column="1"/>
 
-        <Image x:Name="camera" Margin="0,0,0,367" Grid.Column="1"/>
-        <TextBox x:Name="angleInput" HorizontalAlignment="Left" Height="23" Margin="116,602,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" Grid.Column="1"/>
-        <Button x:Name="angleBtn" Content="Set Angle" HorizontalAlignment="Left" Margin="241,602,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
+        <Image x:Name="camera" Margin="0,0,0,341" Grid.Column="1"/>
+        <TextBox x:Name="angleInput" HorizontalAlignment="Left" Height="23" Margin="119,601,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" Grid.Column="1"/>
+        <Button x:Name="angleBtn" Content="Set Angle" HorizontalAlignment="Left" Margin="244,601,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
+        <Button x:Name="connectToDevice" Content="Connect" HorizontalAlignment="Left" Margin="244,515,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
+        <Button x:Name="reloadDevices" Content="Reload" HorizontalAlignment="Left" Margin="244,573,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
+        <Button x:Name="disconnectDevice" Content="Disconnect" HorizontalAlignment="Left" Margin="244,543,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="25"/>
 
-        <TextBox x:Name="ipInput" HorizontalAlignment="Left" Height="23" Margin="116,546,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" Grid.Column="1" Text="localhost"/>
-
-        <TextBox x:Name="portInput" HorizontalAlignment="Left" Height="23" Margin="116,574,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" Grid.Column="1" Text="8000"/>
-        <Label x:Name="label" Content="Hostname" Grid.Column="1" HorizontalAlignment="Left" Margin="47,542,0,0" VerticalAlignment="Top" Height="23" Width="64"/>
-        <Label x:Name="label_Copy" Content="Port" Grid.Column="1" HorizontalAlignment="Left" Margin="47,570,0,0" VerticalAlignment="Top" Height="23" Width="32"/>
-        <Label x:Name="label_Copy1" Content="Elevation" Grid.Column="1" HorizontalAlignment="Left" Margin="47,598,0,0" VerticalAlignment="Top" Height="23" Width="58"/>
-        <Image x:Name="image" Grid.Column="1" HorizontalAlignment="Left" Height="240" Margin="47,302,0,0" VerticalAlignment="Top" Width="269" Source="pack://siteoforigin:,,,/Resources/joints.png"/>
-        <Label x:Name="trackingLabel" Content="Skeleton tracking area" HorizontalAlignment="Left" Margin="279,630,0,0" VerticalAlignment="Top"/>
+        <Label x:Name="label" Content="Serial Devices" Grid.Column="1" Margin="28,550,225,0" VerticalAlignment="Top" Height="27"/>
+        <Label x:Name="label_Copy1" Content="Elevation" Grid.Column="1" HorizontalAlignment="Left" Margin="28,600,0,0" VerticalAlignment="Top" Height="23" Width="58"/>
+        <Label x:Name="trackingLabel" Content="Skeleton tracking area" HorizontalAlignment="Left" Margin="279,630,0,0" VerticalAlignment="Top" Height="26" Width="128"/>
+        <ListBox x:Name="listBox" Grid.Column="1" HorizontalAlignment="Left" Height="81" Margin="119,515,0,0" VerticalAlignment="Top" Width="120"/>
 
     </Grid>
 </Window>

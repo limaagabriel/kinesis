@@ -124,7 +124,6 @@ namespace Kinesis
         private void SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
             SkeletonFrame frame = e.OpenSkeletonFrame();
-            bool hasSkeleton = false;
             canvas.Children.Clear();
             if (frame != null)
             {
@@ -135,60 +134,19 @@ namespace Kinesis
                 {
                     if (s.TrackingState == SkeletonTrackingState.Tracked)
                     {
-                        int port = 0;
-                        int.TryParse(portInput.Text, out port);
-
-                        DataGroup d = new DataGroup(port, ipInput.Text, s);
-
                         drawJoints(s);
-                        Thread socketThread = new Thread((object data) => {
-                            DataGroup group = (DataGroup) data;
-
-                            sendJointsData(group.getSkeleton(),
-                                group.getHost(),
-                                group.getPort());
-                        });
-                        socketThread.Start(d);
-                        hasSkeleton = true;
+                        sendJointsData(s);
                         break;
                     }
                 }
-
-                if(hasSkeleton)
-                    trackingLabel.Visibility = Visibility.Collapsed;
-                else
-                    trackingLabel.Visibility = Visibility.Visible;
             }
         }
 
-        private void sendJointsData(Skeleton s, string host, int port)
+        private void sendJointsData(Skeleton s)
         {
-                try
-                {
-                    string content = "SKELETON_FRAME;";
-                    TcpClient socket = new TcpClient(host, port);
-                    NetworkStream stream = socket.GetStream();
 
-                    foreach(Joint j in s.Joints)
-                    {
-                        Point p = kinect.SkeletonPointToScreen(j.Position);
-                        content += j.JointType.ToString() + "," + p.X + "," + p.Y + ";";
-                    }
-
-                    byte[] toSend = Encoding.ASCII.GetBytes(content);
-                    stream.Write(toSend, 0, toSend.Length);
-
-                    byte[] toReceive = new byte[1024];
-                    stream.Read(toReceive, 0, toReceive.Length);
-
-                    stream.Close();
-                    socket.Close();
-                }
-                catch(Exception e)
-                {
-                    MessageBox.Show(e.Message, "Error on server connection");
-                }
         }
+
 
         private void drawJoints(Skeleton skeleton)
         {
