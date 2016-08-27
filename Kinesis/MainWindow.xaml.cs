@@ -34,6 +34,7 @@ namespace Kinesis
         private readonly Brush inferredBoneBrush = Brushes.Yellow;
         private readonly int frameReduction = 2;
         private StateFlow flow = new StateFlow();
+        private SerialPort port = null;
 
         public MainWindow()
         {
@@ -41,6 +42,11 @@ namespace Kinesis
             status.Text = "Welcome to Kinesis!";
             KinectSensor.KinectSensors.StatusChanged += StatusChanged;
             angleBtn.Click += UpdateAngle;
+            connectToDevice.Click += ConnectToDevice;
+            disconnectDevice.Click += DisconnectDevice;
+            disconnectDevice.IsEnabled = false;
+            reloadDevices.Click += ReloadDevices;
+            ReloadDevices(null, null);
 
             flow.subscribe((state) =>
             {
@@ -59,6 +65,14 @@ namespace Kinesis
                     case "KINECT_ATTACHED":
                         angleBtn.IsEnabled = true;
                         break;
+                    case "CONNECTED_TO_DEVICE":
+                        connectToDevice.IsEnabled = false;
+                        disconnectDevice.IsEnabled = true;
+                        break;
+                    case "DEVICE_DISCONNECTED":
+                        disconnectDevice.IsEnabled = false;
+                        connectToDevice.IsEnabled = true;
+                        break;
                     default:
                         status.Text = "Invalid state";
                         break;
@@ -75,6 +89,45 @@ namespace Kinesis
         {
             if(kinect != null)
                 kinect.Stop();
+        }
+
+        private void ReloadDevices(object sender, RoutedEventArgs e)
+        {
+            devicesList.Items.Clear();
+            foreach (String s in SerialPort.GetPortNames())
+            {
+                devicesList.Items.Add(s);
+            }
+        }
+
+        private void ConnectToDevice(object sender, RoutedEventArgs e)
+        {
+            if(devicesList.SelectedItem != null)
+            {
+                string selected = devicesList.SelectedItem.ToString();
+                if (SerialPort.GetPortNames().Contains(selected) && (port == null || !port.IsOpen))
+                {
+                    port = new SerialPort(selected, 9600);
+                    port.Open();
+                    flow.dispatch("CONNECTED_TO_DEVICE");
+                }
+                else
+                {
+                    status.Text = "Invalid device port descriptor.";
+                }
+            }
+        }
+
+        private void DisconnectDevice(object sender, RoutedEventArgs e)
+        {
+            if(port != null)
+            {
+                if (port.IsOpen)
+                    port.Close();
+                port = null;
+            }
+
+            flow.dispatch("DEVICE_DISCONNECTED");
         }
 
         private void StatusChanged(object sender, StatusChangedEventArgs e)

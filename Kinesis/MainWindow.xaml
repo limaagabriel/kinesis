@@ -26,7 +26,7 @@
         <Label x:Name="label" Content="Serial Devices" Grid.Column="1" Margin="28,550,225,0" VerticalAlignment="Top" Height="27"/>
         <Label x:Name="label_Copy1" Content="Elevation" Grid.Column="1" HorizontalAlignment="Left" Margin="28,600,0,0" VerticalAlignment="Top" Height="23" Width="58"/>
         <Label x:Name="trackingLabel" Content="Skeleton tracking area" HorizontalAlignment="Left" Margin="279,630,0,0" VerticalAlignment="Top" Height="26" Width="128"/>
-        <ListBox x:Name="listBox" Grid.Column="1" HorizontalAlignment="Left" Height="81" Margin="119,515,0,0" VerticalAlignment="Top" Width="120"/>
+        <ListBox x:Name="devicesList" Grid.Column="1" HorizontalAlignment="Left" Height="81" Margin="119,515,0,0" VerticalAlignment="Top" Width="120"/>
 
     </Grid>
 </Window>
