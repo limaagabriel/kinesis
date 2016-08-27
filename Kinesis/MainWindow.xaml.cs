@@ -30,8 +30,8 @@ namespace Kinesis
         private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromRgb(237, 84, 52));
         private readonly double JointThickness = 15;
         private readonly double boneThickness = 10;
-        private readonly Brush trackedBoneBrush = new SolidColorBrush(Color.FromRgb(255, 0, 255));
-        private readonly Brush inferredBoneBrush = Brushes.Yellow;
+        private readonly Brush trackedBoneBrush = Brushes.Black;
+        private readonly Brush inferredBoneBrush = Brushes.Gray;
         private readonly int frameReduction = 2;
         private StateFlow flow = new StateFlow();
         private SerialPort port = null;
@@ -109,6 +109,7 @@ namespace Kinesis
                 {
                     port = new SerialPort(selected, 9600);
                     port.Open();
+
                     flow.dispatch("CONNECTED_TO_DEVICE");
                 }
                 else
@@ -188,18 +189,29 @@ namespace Kinesis
                     if (s.TrackingState == SkeletonTrackingState.Tracked)
                     {
                         drawJoints(s);
-                        sendJointsData(s);
+                        if(port != null && port.IsOpen)
+                        {
+                            Thread teleactive = new Thread(new ParameterizedThreadStart((object o) => {
+                                SerialPort p = (SerialPort) o;
+
+                                string content = "";
+
+                                foreach(Joint j in s.Joints)
+                                {
+                                    Point pos = kinect.SkeletonPointToScreen(j.Position);
+                                    content += j.JointType.ToString() + "," + pos.X + "," + pos.Y + ";";
+                                }
+
+                                p.WriteLine(content);
+                            }));
+
+                            teleactive.Start(port);
+                        }
                         break;
                     }
                 }
             }
         }
-
-        private void sendJointsData(Skeleton s)
-        {
-
-        }
-
 
         private void drawJoints(Skeleton skeleton)
         {
@@ -314,7 +326,7 @@ namespace Kinesis
             line.Y2 = joint1.Position.Y;
 
             line.StrokeThickness = boneThickness;
-            line.Fill = drawBrush;
+            line.Stroke = drawBrush;
             canvas.Children.Add(line);
         }
     }
