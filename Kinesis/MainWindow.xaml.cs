@@ -238,8 +238,11 @@ namespace Kinesis
 
                     foreach (Joint j in s.Joints)
                     {
-                        Point pos = kinect.SkeletonPointToScreen(j.Position);
-                        content += j.JointType.ToString() + "," + pos.X + "," + pos.Y + ";";
+                        if (trackedJoints.Contains(j.JointType))
+                        {
+                            Point pos = kinect.SkeletonPointToScreen(j.Position);
+                            content += j.JointType.ToString() + "," + pos.X + "," + pos.Y + ";";
+                        }
                     }
 
                     p.WriteLine(content);
