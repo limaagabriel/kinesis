@@ -13,8 +13,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Microsoft.Kinect;
-using System.Net;
-using System.Net.Sockets;
+using System.IO;
 using System.IO.Ports;
 
 namespace Kinesis
@@ -29,10 +28,12 @@ namespace Kinesis
         private readonly Brush inferredJointBrush = new SolidColorBrush(Color.FromRgb(52, 52, 52));
         private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromRgb(237, 84, 52));
         private readonly double JointThickness = 15;
-        private readonly double boneThickness = 10;
+        private readonly double boneThickness = 5;
         private readonly Brush trackedBoneBrush = Brushes.Black;
         private readonly Brush inferredBoneBrush = Brushes.Gray;
         private readonly int frameReduction = 2;
+        private FileStream fs = null;
+        private bool isCalibrating = false;
         private StateFlow flow = new StateFlow();
         private SerialPort port = null;
 
@@ -44,6 +45,7 @@ namespace Kinesis
             angleBtn.Click += UpdateAngle;
             connectToDevice.Click += ConnectToDevice;
             disconnectDevice.Click += DisconnectDevice;
+            calibrateBtn.Click += SetDefaultPosition;
             disconnectDevice.IsEnabled = false;
             reloadDevices.Click += ReloadDevices;
             ReloadDevices(null, null);
@@ -73,6 +75,14 @@ namespace Kinesis
                         disconnectDevice.IsEnabled = false;
                         connectToDevice.IsEnabled = true;
                         break;
+                    case "CALIBRATE":
+                        isCalibrating = true;
+                        canvas.Background = Brushes.DimGray;
+                        break;
+                    case "FINISH_CALIBRATING":
+                        isCalibrating = false;
+                        canvas.Background = Brushes.White;
+                        break;
                     default:
                         status.Text = "Invalid state";
                         break;
@@ -89,6 +99,30 @@ namespace Kinesis
         {
             if(kinect != null)
                 kinect.Stop();
+        }
+
+        private void SetDefaultPosition(object sender, RoutedEventArgs e)
+        {
+            string dir = "C:\\KinesisSettings\\";
+            string filePath = dir + "defaultPosition.csv";
+            string oldFilePath = dir + "defaultPosition.old.csv";
+
+            if(!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            if(File.Exists(filePath))
+            {
+                if (File.Exists(oldFilePath))
+                    File.Delete(oldFilePath);
+
+                byte[] file = File.ReadAllBytes(filePath);
+                FileStream auxFs = File.Create(oldFilePath);
+                auxFs.Write(file, 0, file.Length);
+                auxFs.Close();
+            }
+
+            fs = File.Create(filePath);
+            flow.dispatch("CALIBRATE");
         }
 
         private void ReloadDevices(object sender, RoutedEventArgs e)
@@ -189,7 +223,12 @@ namespace Kinesis
                     if (s.TrackingState == SkeletonTrackingState.Tracked)
                     {
                         drawBody(s);
-                        if(port != null && port.IsOpen)
+                        if(isCalibrating)
+                        {
+                            
+                            flow.dispatch("FINISH_CALIBRATING");
+                        }
+                        else if(port != null && port.IsOpen)
                         {
                             Thread teleactive = new Thread(new ParameterizedThreadStart((object o) => {
                                 SerialPort p = (SerialPort) o;
@@ -209,36 +248,6 @@ namespace Kinesis
                         }
                         break;
                     }
-                }
-            }
-        }
-
-        private void drawJoints(Skeleton skeleton)
-        {
-            foreach (Joint joint in skeleton.Joints)
-            {
-                Brush drawBrush = null;
-
-                if (joint.TrackingState == JointTrackingState.Tracked)
-                {
-                    drawBrush = trackedJointBrush;
-                }
-                else if (joint.TrackingState == JointTrackingState.Inferred)
-                {
-                    drawBrush = inferredJointBrush;
-                }
-
-                if (drawBrush != null)
-                {
-                    Ellipse e = new Ellipse();
-                    Point p = kinect.SkeletonPointToScreen(joint.Position);
-                    e.Fill = drawBrush;
-                    e.Width = JointThickness;
-                    e.Height = JointThickness;
-                    canvas.Children.Add(e);
-                    Canvas.SetTop(e, p.Y);
-                    Canvas.SetLeft(e, p.X);
-                    
                 }
             }
         }
@@ -263,33 +272,33 @@ namespace Kinesis
         private void drawBody(Skeleton skeleton)
         {
             // Render Torso
-            this.DrawBone(skeleton, JointType.Head, JointType.ShoulderCenter);
-            this.DrawBone(skeleton, JointType.ShoulderCenter, JointType.ShoulderLeft);
-            this.DrawBone(skeleton, JointType.ShoulderCenter, JointType.ShoulderRight);
-            this.DrawBone(skeleton, JointType.ShoulderCenter, JointType.Spine);
-            this.DrawBone(skeleton, JointType.Spine, JointType.HipCenter);
-            this.DrawBone(skeleton, JointType.HipCenter, JointType.HipLeft);
-            this.DrawBone(skeleton, JointType.HipCenter, JointType.HipRight);
+            DrawBone(skeleton, JointType.Head, JointType.ShoulderCenter);
+            DrawBone(skeleton, JointType.ShoulderCenter, JointType.ShoulderLeft);
+            DrawBone(skeleton, JointType.ShoulderCenter, JointType.ShoulderRight);
+            DrawBone(skeleton, JointType.ShoulderCenter, JointType.Spine);
+            DrawBone(skeleton, JointType.Spine, JointType.HipCenter);
+            DrawBone(skeleton, JointType.HipCenter, JointType.HipLeft);
+            DrawBone(skeleton, JointType.HipCenter, JointType.HipRight);
 
             // Left Arm
-            this.DrawBone(skeleton, JointType.ShoulderLeft, JointType.ElbowLeft);
-            this.DrawBone(skeleton, JointType.ElbowLeft, JointType.WristLeft);
-            this.DrawBone(skeleton, JointType.WristLeft, JointType.HandLeft);
+            DrawBone(skeleton, JointType.ShoulderLeft, JointType.ElbowLeft);
+            DrawBone(skeleton, JointType.ElbowLeft, JointType.WristLeft);
+            DrawBone(skeleton, JointType.WristLeft, JointType.HandLeft);
 
             // Right Arm
-            this.DrawBone(skeleton, JointType.ShoulderRight, JointType.ElbowRight);
-            this.DrawBone(skeleton, JointType.ElbowRight, JointType.WristRight);
-            this.DrawBone(skeleton, JointType.WristRight, JointType.HandRight);
+            DrawBone(skeleton, JointType.ShoulderRight, JointType.ElbowRight);
+            DrawBone(skeleton, JointType.ElbowRight, JointType.WristRight);
+            DrawBone(skeleton, JointType.WristRight, JointType.HandRight);
 
             // Left Leg
-            this.DrawBone(skeleton, JointType.HipLeft, JointType.KneeLeft);
-            this.DrawBone(skeleton, JointType.KneeLeft, JointType.AnkleLeft);
-            this.DrawBone(skeleton, JointType.AnkleLeft, JointType.FootLeft);
+            DrawBone(skeleton, JointType.HipLeft, JointType.KneeLeft);
+            DrawBone(skeleton, JointType.KneeLeft, JointType.AnkleLeft);
+            DrawBone(skeleton, JointType.AnkleLeft, JointType.FootLeft);
 
             // Right Leg
-            this.DrawBone(skeleton, JointType.HipRight, JointType.KneeRight);
-            this.DrawBone(skeleton, JointType.KneeRight, JointType.AnkleRight);
-            this.DrawBone(skeleton, JointType.AnkleRight, JointType.FootRight);
+            DrawBone(skeleton, JointType.HipRight, JointType.KneeRight);
+            DrawBone(skeleton, JointType.KneeRight, JointType.AnkleRight);
+            DrawBone(skeleton, JointType.AnkleRight, JointType.FootRight);
 
             drawJoints(skeleton);
         }
@@ -328,6 +337,38 @@ namespace Kinesis
             line.StrokeThickness = boneThickness;
             line.Stroke = drawBrush;
             canvas.Children.Add(line);
+            Canvas.SetTop(line, line.X1);
+            Canvas.SetLeft(line, line.Y1);
+        }
+
+        private void drawJoints(Skeleton skeleton)
+        {
+            foreach (Joint joint in skeleton.Joints)
+            {
+                Brush drawBrush = null;
+
+                if (joint.TrackingState == JointTrackingState.Tracked)
+                {
+                    drawBrush = trackedJointBrush;
+                }
+                else if (joint.TrackingState == JointTrackingState.Inferred)
+                {
+                    drawBrush = inferredJointBrush;
+                }
+
+                if (drawBrush != null)
+                {
+                    Ellipse e = new Ellipse();
+                    Point p = kinect.SkeletonPointToScreen(joint.Position);
+                    e.Fill = drawBrush;
+                    e.Width = JointThickness;
+                    e.Height = JointThickness;
+                    canvas.Children.Add(e);
+                    Canvas.SetTop(e, p.Y);
+                    Canvas.SetLeft(e, p.X);
+
+                }
+            }
         }
     }
     public static class KinesisExtensions
