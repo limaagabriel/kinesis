@@ -12,9 +12,9 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-using Microsoft.Kinect;
 using System.IO;
 using System.IO.Ports;
+using Microsoft.Kinect;
 
 namespace Kinesis
 {
@@ -24,33 +24,209 @@ namespace Kinesis
     public partial class MainWindow : Window
     {
         //Define variables
-        private KinectSensor kinect = null;
+        private KinectSensor kinect;
         private readonly Brush inferredJointBrush = new SolidColorBrush(Color.FromRgb(52, 52, 52));
         private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromRgb(237, 84, 52));
         private readonly double JointThickness = 15;
         private readonly double boneThickness = 5;
         private readonly Brush trackedBoneBrush = Brushes.Black;
         private readonly Brush inferredBoneBrush = Brushes.Gray;
-        private readonly int frameReduction = 2;
-        private FileStream fs = null;
-        private bool isCalibrating = false;
         private StateFlow flow = new StateFlow();
-        private SerialPort port = null;
+        private SerialPort port;
+        private int frameReduction = 2;
+        private FileStream fs;
+        private bool isCalibrating = false;
+        private JointType[] trackedJoints = {
+            JointType.ElbowLeft, JointType.ElbowRight,
+            JointType.WristLeft, JointType.WristRight
+        };
+        private int calibrationOffset = 100;
+        private int calibrationIndex = 0;
+        private SkeletonPoint[] calibrationData = new SkeletonPoint[20];
+        private string dir = "C:\\KinesisSettings\\";
+        private string filePath = "C:\\KinesisSettings\\defaultPosition.txt";
+        private string oldFilePath = "C:\\KinesisSettings\\defaultPosition.old.txt";
 
         public MainWindow()
         {
             InitializeComponent();
-            status.Text = "Welcome to Kinesis!";
             KinectSensor.KinectSensors.StatusChanged += StatusChanged;
             angleBtn.Click += UpdateAngle;
             connectToDevice.Click += ConnectToDevice;
             disconnectDevice.Click += DisconnectDevice;
-            calibrateBtn.Click += SetDefaultPosition;
             disconnectDevice.IsEnabled = false;
             reloadDevices.Click += ReloadDevices;
+            calibrateBtn.Click += SetFiles;
             ReloadDevices(null, null);
+            
+            flow.subscribe(reducer);
+            if (kinect == null)
+                StatusChanged(null, null);
+        }
 
-            flow.subscribe((state) =>
+        private void Window_Closed(object sender, EventArgs e)
+        {
+            if (kinect != null && kinect.IsRunning)
+                kinect.Stop();
+            if (port != null && port.IsOpen)
+                port.Close();
+            port = null;
+            kinect = null;
+        }
+
+        private void StatusChanged(object sender, StatusChangedEventArgs e)
+        {
+            if (KinectSensor.KinectSensors.Count > 0)
+            {
+                try
+                {
+                    kinect = KinectSensor.KinectSensors[0];
+
+                    kinect.Start();
+
+                    kinect.SkeletonStream.Enable();
+                    kinect.ColorStream.Enable();
+                    kinect.SkeletonFrameReady += SkeletonFrameReady;
+                    kinect.ColorFrameReady += ColorFrameReady;
+                    flow.dispatch("KINECT_ATTACHED");
+                }
+                catch (Exception e1)
+                {
+                    flow.dispatch("NO_KINECT_ATTACHED");
+                }
+            }
+            else
+            {
+                flow.dispatch("NO_KINECT_ATTACHED");
+            }
+        }
+
+        private void ColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
+        {
+            ColorImageFrame frame = e.OpenColorImageFrame();
+
+            if (frame != null && frame.FrameNumber % frameReduction == 0)
+            {
+                byte[] pixelData = new byte[frame.PixelDataLength];
+                frame.CopyPixelDataTo(pixelData);
+
+                camera.Source = (BitmapSource.Create(
+                    frame.Width, frame.Height, 96, 96, PixelFormats.Bgr32,
+                    null, pixelData, frame.Width * 4));
+            }
+        }
+
+        private void SetFiles(object sender, RoutedEventArgs e)
+        {
+            
+
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            if (File.Exists(filePath))
+            {
+                if (File.Exists(oldFilePath))
+                    File.Delete(oldFilePath);
+
+                byte[] file = File.ReadAllBytes(filePath);
+                FileStream auxFs = File.Create(oldFilePath);
+                auxFs.Write(file, 0, file.Length);
+                auxFs.Close();
+            }
+
+            fs = File.Create(filePath);
+            flow.dispatch("CALIBRATE");
+        }
+
+        private void SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
+        {
+            canvas.Children.Clear();
+
+            SkeletonFrame frame = e.OpenSkeletonFrame();
+            if (frame == null) return;
+
+            Skeleton[] trackedSkeletons = new Skeleton[frame.SkeletonArrayLength];
+            frame.CopySkeletonDataTo(trackedSkeletons);
+            Skeleton s = null;
+
+            foreach(Skeleton skel in trackedSkeletons)
+            {
+                if(skel.TrackingState == SkeletonTrackingState.Tracked)
+                {
+                    s = skel;
+                    break;
+                }
+            }
+
+            if (s == null)
+                return;
+
+            drawBody(s);
+
+            if (isCalibrating)
+            {
+                flow.dispatch("CALIBRATE");
+                foreach (Joint j in s.Joints)
+                {
+                    int index = (int) j.JointType;
+                    if(calibrationData[index] == null)
+                    {
+                        calibrationData[index] = j.Position;
+                    }
+                    else
+                    {
+                        SkeletonPoint oldPoint = calibrationData[index];
+                        SkeletonPoint newPoint = new SkeletonPoint();
+                        newPoint.X = (j.Position.X + oldPoint.X) / 2;
+                        newPoint.Y = (j.Position.Y + oldPoint.Y) / 2;
+                        newPoint.Z = (j.Position.Z + oldPoint.Z) / 2;
+
+                        calibrationData[index] = newPoint;
+                    }
+                }
+
+                calibrationIndex += 1;
+
+                if(calibrationIndex > calibrationOffset)
+                {
+                    string content = "";
+                    for (int i = 0; i < calibrationData.Length; i++)
+                    {
+                        content += i + ";" + calibrationData[i].X + ";" +
+                            calibrationData[i].Y + ";" + calibrationData[i].Z + "\n"; 
+                    }
+
+                    byte[] byteArray = Encoding.ASCII.GetBytes(content);
+                    fs.Write(byteArray, 0, byteArray.Length);
+
+                    flow.dispatch("FINISH_CALIBRATING");
+                    fs.Close();
+                    fs = null;
+                }
+            }
+            else if (port != null && port.IsOpen)
+            {
+                Thread teleactive = new Thread(new ParameterizedThreadStart((object o) =>
+                {
+                    SerialPort p = (SerialPort)o;
+
+                    string content = "";
+
+                    foreach (Joint j in s.Joints)
+                    {
+                        Point pos = kinect.SkeletonPointToScreen(j.Position);
+                        content += j.JointType.ToString() + "," + pos.X + "," + pos.Y + ";";
+                    }
+
+                    p.WriteLine(content);
+                }));
+
+                teleactive.Start(port);
+            }
+        }
+
+        private object reducer(string state)
+        {
             {
                 status.Text = "State: " + state;
                 switch (state)
@@ -65,6 +241,7 @@ namespace Kinesis
                         camera.Source = bitmap;
                         break;
                     case "KINECT_ATTACHED":
+                        angleInput.Text = "" + kinect.ElevationAngle;
                         angleBtn.IsEnabled = true;
                         break;
                     case "CONNECTED_TO_DEVICE":
@@ -84,45 +261,10 @@ namespace Kinesis
                         canvas.Background = Brushes.White;
                         break;
                     default:
-                        status.Text = "Invalid state";
                         break;
                 }
-
-                return null;
-            });
-
-            if(kinect == null || !kinect.IsRunning)
-                StatusChanged(null, null);
-        }
-
-        private void Window_Closed(object sender, EventArgs e)
-        {
-            if(kinect != null)
-                kinect.Stop();
-        }
-
-        private void SetDefaultPosition(object sender, RoutedEventArgs e)
-        {
-            string dir = "C:\\KinesisSettings\\";
-            string filePath = dir + "defaultPosition.csv";
-            string oldFilePath = dir + "defaultPosition.old.csv";
-
-            if(!Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            if(File.Exists(filePath))
-            {
-                if (File.Exists(oldFilePath))
-                    File.Delete(oldFilePath);
-
-                byte[] file = File.ReadAllBytes(filePath);
-                FileStream auxFs = File.Create(oldFilePath);
-                auxFs.Write(file, 0, file.Length);
-                auxFs.Close();
             }
-
-            fs = File.Create(filePath);
-            flow.dispatch("CALIBRATE");
+            return null;
         }
 
         private void ReloadDevices(object sender, RoutedEventArgs e)
@@ -139,7 +281,8 @@ namespace Kinesis
             if(devicesList.SelectedItem != null)
             {
                 string selected = devicesList.SelectedItem.ToString();
-                if (SerialPort.GetPortNames().Contains(selected) && (port == null || !port.IsOpen))
+                if (SerialPort.GetPortNames().Contains(selected) && 
+                    (port == null || !port.IsOpen))
                 {
                     port = new SerialPort(selected, 9600);
                     port.Open();
@@ -163,93 +306,6 @@ namespace Kinesis
             }
 
             flow.dispatch("DEVICE_DISCONNECTED");
-        }
-
-        private void StatusChanged(object sender, StatusChangedEventArgs e)
-        {
-            if(KinectSensor.KinectSensors.Count > 0)
-            {
-                try
-                {
-                    kinect = KinectSensor.KinectSensors[0];
-                    
-                    kinect.Start();
-                    
-                    kinect.SkeletonStream.Enable();
-                    kinect.ColorStream.Enable();
-                    kinect.SkeletonFrameReady += SkeletonFrameReady;
-                    kinect.ColorFrameReady += ColorFrameReady;
-                    angleInput.Text = "" + kinect.ElevationAngle;
-                    flow.dispatch("KINECT_ATTACHED");
-                }
-                catch (Exception e1)
-                {
-                    flow.dispatch("NO_KINECT_ATTACHED");
-                    status.Text = "Error: " + e1.Message;
-                }
-            }
-            else
-            {
-                flow.dispatch("NO_KINECT_ATTACHED");
-            }
-        }
-
-        private void ColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
-        {
-            ColorImageFrame frame = e.OpenColorImageFrame();
-
-            if (frame != null && frame.FrameNumber % frameReduction == 0)
-            {
-                byte[] pixelData = new byte[frame.PixelDataLength];
-                frame.CopyPixelDataTo(pixelData);
-
-                camera.Source = BitmapSource.Create(
-                    frame.Width, frame.Height, 96, 96, PixelFormats.Bgr32,
-                    null, pixelData, frame.Width * 4);
-            }
-        }
-
-        private void SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
-        {
-            SkeletonFrame frame = e.OpenSkeletonFrame();
-            canvas.Children.Clear();
-            if (frame != null)
-            {
-                Skeleton[] trackedSkeletons = new Skeleton[frame.SkeletonArrayLength];
-                frame.CopySkeletonDataTo(trackedSkeletons);
-
-                foreach (Skeleton s in trackedSkeletons)
-                {
-                    if (s.TrackingState == SkeletonTrackingState.Tracked)
-                    {
-                        drawBody(s);
-                        if(isCalibrating)
-                        {
-                            
-                            flow.dispatch("FINISH_CALIBRATING");
-                        }
-                        else if(port != null && port.IsOpen)
-                        {
-                            Thread teleactive = new Thread(new ParameterizedThreadStart((object o) => {
-                                SerialPort p = (SerialPort) o;
-
-                                string content = "";
-
-                                foreach(Joint j in s.Joints)
-                                {
-                                    Point pos = kinect.SkeletonPointToScreen(j.Position);
-                                    content += j.JointType.ToString() + "," + pos.X + "," + pos.Y + ";";
-                                }
-
-                                p.WriteLine(content);
-                            }));
-
-                            teleactive.Start(port);
-                        }
-                        break;
-                    }
-                }
-            }
         }
 
         private void UpdateAngle(object sender, RoutedEventArgs e)
@@ -341,6 +397,31 @@ namespace Kinesis
             Canvas.SetLeft(line, line.Y1);
         }
 
+        private void drawJointsFromSettings(Skeleton s)
+        {
+            byte[] content = File.ReadAllBytes(filePath);
+            string completeFile = Encoding.ASCII.GetString(content);
+
+            string[] lines = completeFile.Split('\n');
+            for(int i = 0; i < lines.Length - 1; i++)
+            {
+                string[] data = lines[i].Split(';');
+                SkeletonPoint sp = new SkeletonPoint();
+                sp.X = float.Parse(data[1]);
+                sp.Y = float.Parse(data[2]);
+                sp.Z = float.Parse(data[3]);
+
+                Point p = kinect.SkeletonPointToScreen(sp);
+                Ellipse e = new Ellipse();
+                e.Fill = trackedJointBrush;
+                e.Width = JointThickness;
+                e.Height = JointThickness;
+                canvas.Children.Add(e);
+                Canvas.SetTop(e, p.Y);
+                Canvas.SetLeft(e, p.X);
+            }
+         }
+
         private void drawJoints(Skeleton skeleton)
         {
             foreach (Joint joint in skeleton.Joints)
@@ -371,6 +452,7 @@ namespace Kinesis
             }
         }
     }
+
     public static class KinesisExtensions
     {
         public static bool TryToSetAngle(this KinectSensor kinect, int angle)
@@ -380,7 +462,7 @@ namespace Kinesis
                 kinect.ElevationAngle = angle;
                 return true;
             }
-            catch(Exception e)
+            catch (Exception e)
             {
                 MessageBox.Show(e.Message, "Elevation error");
                 return false;
