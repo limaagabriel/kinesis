@@ -42,10 +42,13 @@ namespace Kinesis
         };
         private int calibrationOffset = 100;
         private int calibrationIndex = 0;
+        private SkeletonPoint[] lastJointsData = new SkeletonPoint[20];
+        private SkeletonPoint[] differentials = new SkeletonPoint[20];
         private SkeletonPoint[] calibrationData = new SkeletonPoint[20];
         private string dir = "C:\\KinesisSettings\\";
         private string filePath = "C:\\KinesisSettings\\defaultPosition.txt";
         private string oldFilePath = "C:\\KinesisSettings\\defaultPosition.old.txt";
+        private SkeletonPoint[] defaultPosition;
 
         public MainWindow()
         {
@@ -57,6 +60,7 @@ namespace Kinesis
             disconnectDevice.IsEnabled = false;
             reloadDevices.Click += ReloadDevices;
             calibrateBtn.Click += SetFiles;
+            loadDefaultBtn.Click += LoadDefaultPosition;
             ReloadDevices(null, null);
             
             flow.subscribe(reducer);
@@ -92,6 +96,7 @@ namespace Kinesis
                 }
                 catch (Exception e1)
                 {
+                    status.Text = e1.Message;
                     flow.dispatch("NO_KINECT_ATTACHED");
                 }
             }
@@ -118,8 +123,6 @@ namespace Kinesis
 
         private void SetFiles(object sender, RoutedEventArgs e)
         {
-            
-
             if (!Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
@@ -136,6 +139,15 @@ namespace Kinesis
 
             fs = File.Create(filePath);
             flow.dispatch("CALIBRATE");
+        }
+
+        private SkeletonPoint Subtract(SkeletonPoint f, SkeletonPoint s)
+        {
+            SkeletonPoint sp = new SkeletonPoint();
+            sp.X = f.X - s.X;
+            sp.Y = f.Y - s.Y;
+            sp.Z = f.Z - s.Z;
+            return sp;
         }
 
         private void SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
@@ -161,7 +173,19 @@ namespace Kinesis
             if (s == null)
                 return;
 
+            foreach(Joint j in s.Joints)
+            {
+                int index = (int)j.JointType;
+                differentials[index] = Subtract(j.Position, lastJointsData[index]);
+            }
+
             drawBody(s);
+
+            foreach (Joint j in s.Joints)
+            {
+                int index = (int)j.JointType;
+                lastJointsData[index] = j.Position;
+            }
 
             if (isCalibrating)
             {
@@ -284,10 +308,14 @@ namespace Kinesis
                 if (SerialPort.GetPortNames().Contains(selected) && 
                     (port == null || !port.IsOpen))
                 {
-                    port = new SerialPort(selected, 9600);
-                    port.Open();
+                    LoadDefaultPosition(null, null);
 
-                    flow.dispatch("CONNECTED_TO_DEVICE");
+                    if(defaultPosition != null)
+                    {
+                        port = new SerialPort(selected, 9600);
+                        port.Open();
+                        flow.dispatch("CONNECTED_TO_DEVICE");
+                    }
                 }
                 else
                 {
@@ -397,12 +425,31 @@ namespace Kinesis
             Canvas.SetLeft(line, line.Y1);
         }
 
-        private SkeletonPoint[] readDefaultSkeletonPoints()
+        private void LoadDefaultPosition(object sender, RoutedEventArgs e)
+        {
+            defaultPosition = ReadDefaultSkeletonPoints();
+            if(defaultPosition != null)
+            {
+                status.Text = "Default position loaded successfully!";
+                lastJointsData = defaultPosition;
+            }
+
+            for(int i = 0; i < differentials.Length; i++)
+            {
+                differentials[i] = new SkeletonPoint();
+                differentials[i].X = 0;
+                differentials[i].Y = 0;
+                differentials[i].Z = 0;
+            }
+        }
+
+        private SkeletonPoint[] ReadDefaultSkeletonPoints()
         {
             SkeletonPoint[] allSp = new SkeletonPoint[20];
             if(!File.Exists(filePath))
             {
-                status.Text = "defaultPosition file does not exist. Calibrate first!";
+                MessageBox.Show("Please, start calibration! Kinesis needs this file to make things right.",
+                    "defaultPosition file not found");
                 return null;
             }
             byte[] content = File.ReadAllBytes(filePath);
@@ -426,7 +473,7 @@ namespace Kinesis
 
         private void drawJointsFromDefaultPosition()
         {
-            SkeletonPoint[] allSp = readDefaultSkeletonPoints();
+            SkeletonPoint[] allSp = ReadDefaultSkeletonPoints();
 
             for(int i = 0; i < allSp.Length; i++) {
                 SkeletonPoint sp = allSp[i];
