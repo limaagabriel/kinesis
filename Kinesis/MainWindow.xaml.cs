@@ -397,20 +397,39 @@ namespace Kinesis
             Canvas.SetLeft(line, line.Y1);
         }
 
-        private void drawJointsFromSettings(Skeleton s)
+        private SkeletonPoint[] readDefaultSkeletonPoints()
         {
+            SkeletonPoint[] allSp = new SkeletonPoint[20];
+            if(!File.Exists(filePath))
+            {
+                status.Text = "defaultPosition file does not exist. Calibrate first!";
+                return null;
+            }
             byte[] content = File.ReadAllBytes(filePath);
             string completeFile = Encoding.ASCII.GetString(content);
 
             string[] lines = completeFile.Split('\n');
-            for(int i = 0; i < lines.Length - 1; i++)
+            for (int i = 0; i < lines.Length - 1; i++)
             {
                 string[] data = lines[i].Split(';');
                 SkeletonPoint sp = new SkeletonPoint();
+                int index = int.Parse(data[0]);
                 sp.X = float.Parse(data[1]);
                 sp.Y = float.Parse(data[2]);
                 sp.Z = float.Parse(data[3]);
 
+                allSp[index] = sp;
+            }
+
+            return allSp;
+        }
+
+        private void drawJointsFromDefaultPosition()
+        {
+            SkeletonPoint[] allSp = readDefaultSkeletonPoints();
+
+            for(int i = 0; i < allSp.Length; i++) {
+                SkeletonPoint sp = allSp[i];
                 Point p = kinect.SkeletonPointToScreen(sp);
                 Ellipse e = new Ellipse();
                 e.Fill = trackedJointBrush;

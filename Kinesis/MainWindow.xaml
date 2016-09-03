@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Kinesis"
         mc:Ignorable="d"
-        Title="Kinesis" Width="1024" Height="700" WindowStartupLocation="CenterScreen" Icon="pack://siteoforigin:,,,/../../Resources/Logo.png" >
+        Title="Kinesis" Width="1024" Height="700" WindowStartupLocation="CenterScreen" Icon="pack://siteoforigin:,,,/../../Resources/Logo.png" ResizeMode="NoResize" >
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="157*"/>
@@ -16,7 +16,7 @@
 
         <TextBox x:Name="status" TextWrapping="Wrap" Text="" Margin="10,642,0,2" BorderThickness="0" IsEnabled="False" Grid.Column="1"/>
 
-        <Image x:Name="camera" Margin="0,0,0,341" Grid.Column="1"/>
+        <Image x:Name="camera" Margin="0,-6,0,341" Grid.Column="1"/>
         <TextBox x:Name="angleInput" HorizontalAlignment="Left" Height="23" Margin="119,601,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" Grid.Column="1"/>
         <Button x:Name="angleBtn" Content="Set Angle" HorizontalAlignment="Left" Margin="244,601,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
         <Button x:Name="connectToDevice" Content="Connect" HorizontalAlignment="Left" Margin="244,515,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
