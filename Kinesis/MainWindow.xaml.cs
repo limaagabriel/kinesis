@@ -40,7 +40,7 @@ namespace Kinesis
             JointType.ElbowLeft, JointType.ElbowRight,
             JointType.WristLeft, JointType.WristRight
         };
-        private int calibrationOffset = 100;
+        private int calibrationOffset = 150;
         private int calibrationIndex = 0;
         private SkeletonPoint[] lastJointsData = new SkeletonPoint[20];
         private SkeletonPoint[] differentials = new SkeletonPoint[20];
@@ -170,16 +170,15 @@ namespace Kinesis
                 }
             }
 
-            if (s == null)
-                return;
+            if (s == null) return;
 
-            foreach(Joint j in s.Joints)
+            drawBody(s);
+
+            foreach (Joint j in s.Joints)
             {
                 int index = (int)j.JointType;
                 differentials[index] = Subtract(j.Position, lastJointsData[index]);
             }
-
-            drawBody(s);
 
             foreach (Joint j in s.Joints)
             {
@@ -216,8 +215,11 @@ namespace Kinesis
                     string content = "";
                     for (int i = 0; i < calibrationData.Length; i++)
                     {
-                        content += i + ";" + calibrationData[i].X + ";" +
-                            calibrationData[i].Y + ";" + calibrationData[i].Z + "\n"; 
+                        string x = calibrationData[i].X.ToString().Replace(',', '.');
+                        string y = calibrationData[i].Y.ToString().Replace(',', '.');
+                        string z = calibrationData[i].Z.ToString().Replace(',', '.');
+
+                        content += i + "," + x + "," + y + "," + z + ";"; 
                     }
 
                     byte[] byteArray = Encoding.ASCII.GetBytes(content);
@@ -236,13 +238,11 @@ namespace Kinesis
 
                     string content = "";
 
-                    foreach (Joint j in s.Joints)
+                    foreach(JointType type in trackedJoints)
                     {
-                        if (trackedJoints.Contains(j.JointType))
-                        {
-                            Point pos = kinect.SkeletonPointToScreen(j.Position);
-                            content += j.JointType.ToString() + "," + pos.X + "," + pos.Y + ";";
-                        }
+                        int index = (int)type;
+                        SkeletonPoint sp = differentials[index];
+                        content += type.ToString() + "," + sp.X + "," + sp.Y + "," + sp.Z + ";";
                     }
 
                     p.WriteLine(content);
