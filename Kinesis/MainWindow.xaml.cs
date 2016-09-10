@@ -33,7 +33,7 @@ namespace Kinesis
         private readonly Brush inferredBoneBrush = Brushes.Gray;
         private StateFlow flow = new StateFlow();
         private SerialPort port;
-        private int frameReduction = 2;
+        private int frameReduction = 1;
         private FileStream fs;
         private bool isCalibrating = false;
         private JointType[] trackedJoints = {
@@ -50,6 +50,7 @@ namespace Kinesis
         private string oldFilePath = "C:\\KinesisSettings\\defaultPosition.old.txt";
         private SkeletonPoint[] defaultPosition;
         private bool canWriteToPort = true;
+        private int baudRate = 57600;
 
         public MainWindow()
         {
@@ -67,6 +68,14 @@ namespace Kinesis
             flow.subscribe(reducer);
             if (kinect == null)
                 StatusChanged(null, null);
+
+            for(int i = 0; i < differentials.Length; i++)
+            {
+                differentials[i] = new SkeletonPoint();
+                differentials[i].X = 0;
+                differentials[i].Y = 0;
+                differentials[i].Z = 0;
+            }
         }
 
         private void Window_Closed(object sender, EventArgs e)
@@ -151,6 +160,15 @@ namespace Kinesis
             return sp;
         }
 
+        private SkeletonPoint Add(SkeletonPoint f, SkeletonPoint s)
+        {
+            SkeletonPoint sp = new SkeletonPoint();
+            sp.X = f.X + s.X;
+            sp.Y = f.Y + s.Y;
+            sp.Z = f.Z + s.Z;
+            return sp;
+        }
+
         private void SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
             canvas.Children.Clear();
@@ -178,7 +196,8 @@ namespace Kinesis
             foreach (Joint j in s.Joints)
             {
                 int index = (int)j.JointType;
-                differentials[index] = Subtract(j.Position, lastJointsData[index]);
+                SkeletonPoint aux = Subtract(j.Position, lastJointsData[index]);
+                differentials[index] = Add(aux, differentials[index]);
             }
 
             foreach (Joint j in s.Joints)
@@ -242,7 +261,14 @@ namespace Kinesis
                     {
                         int index = (int)type;
                         SkeletonPoint sp = differentials[index];
-                        content += type.ToString() + "," + sp.X + "," + sp.Y + "," + sp.Z + ";";
+                        string z = sp.Z.ToString().Replace(',', '.');
+                        string y = sp.Y.ToString().Replace(',', '.');
+                        string x = sp.X.ToString().Replace(',', '.');
+                        content += type.ToString() + "," + x + "," + y + "," + z + ";";
+
+                        differentials[index].X = 0;
+                        differentials[index].Y = 0;
+                        differentials[index].Z = 0;
                     }
 
                     p.WriteLine(content);
@@ -255,8 +281,6 @@ namespace Kinesis
 
         private void ReceiveDataFromDevice(object sender, SerialDataReceivedEventArgs e)
         {
-            SerialPort p = (SerialPort)sender;
-            string data = p.ReadExisting();
             canWriteToPort = true;
         }
 
@@ -280,10 +304,12 @@ namespace Kinesis
                         angleBtn.IsEnabled = true;
                         break;
                     case "CONNECTED_TO_DEVICE":
+                        connectToDevice.Content = port.PortName;
                         connectToDevice.IsEnabled = false;
                         disconnectDevice.IsEnabled = true;
                         break;
                     case "DEVICE_DISCONNECTED":
+                        connectToDevice.Content = "Connect";
                         disconnectDevice.IsEnabled = false;
                         connectToDevice.IsEnabled = true;
                         break;
@@ -323,7 +349,7 @@ namespace Kinesis
 
                     if(defaultPosition != null)
                     {
-                        port = new SerialPort(selected, 9600);
+                        port = new SerialPort(selected, baudRate);
                         port.Open();
                         port.DataReceived += ReceiveDataFromDevice;
                         flow.dispatch("CONNECTED_TO_DEVICE");
