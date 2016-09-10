@@ -49,6 +49,7 @@ namespace Kinesis
         private string filePath = "C:\\KinesisSettings\\defaultPosition.txt";
         private string oldFilePath = "C:\\KinesisSettings\\defaultPosition.old.txt";
         private SkeletonPoint[] defaultPosition;
+        private bool canWriteToPort = true;
 
         public MainWindow()
         {
@@ -230,15 +231,14 @@ namespace Kinesis
                     fs = null;
                 }
             }
-            else if (port != null && port.IsOpen)
+            else if (port != null && port.IsOpen && canWriteToPort)
             {
-                Thread teleactive = new Thread(new ParameterizedThreadStart((object o) =>
+                Thread t = new Thread(new ParameterizedThreadStart((object o) =>
                 {
                     SerialPort p = (SerialPort)o;
-
                     string content = "";
 
-                    foreach(JointType type in trackedJoints)
+                    foreach (JointType type in trackedJoints)
                     {
                         int index = (int)type;
                         SkeletonPoint sp = differentials[index];
@@ -248,8 +248,16 @@ namespace Kinesis
                     p.WriteLine(content);
                 }));
 
-                teleactive.Start(port);
+                t.Start(port);
+                canWriteToPort = false;
             }
+        }
+
+        private void ReceiveDataFromDevice(object sender, SerialDataReceivedEventArgs e)
+        {
+            SerialPort p = (SerialPort)sender;
+            string data = p.ReadExisting();
+            canWriteToPort = true;
         }
 
         private object reducer(string state)
@@ -317,6 +325,7 @@ namespace Kinesis
                     {
                         port = new SerialPort(selected, 9600);
                         port.Open();
+                        port.DataReceived += ReceiveDataFromDevice;
                         flow.dispatch("CONNECTED_TO_DEVICE");
                     }
                 }
