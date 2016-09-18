@@ -255,23 +255,22 @@ namespace Kinesis
                 Thread t = new Thread(new ParameterizedThreadStart((object o) =>
                 {
                     SerialPort p = (SerialPort)o;
-                    string content = "";
 
-                    foreach (JointType type in trackedJoints)
+                    string[] types = trackedJoints.AsParallel().Select((JointType type) =>
                     {
                         int index = (int)type;
                         SkeletonPoint sp = differentials[index];
                         string z = sp.Z.ToString().Replace(',', '.');
                         string y = sp.Y.ToString().Replace(',', '.');
                         string x = sp.X.ToString().Replace(',', '.');
-                        content += type.ToString() + "," + x + "," + y + "," + z + ";";
+                        return type.ToString() + "," + x + "," + y + "," + z + ";";
 
-                        differentials[index].X = 0;
-                        differentials[index].Y = 0;
-                        differentials[index].Z = 0;
-                    }
+                        //differentials[index].X = 0;
+                        //differentials[index].Y = 0;
+                        //differentials[index].Z = 0;
+                    }).ToArray();
 
-                    p.WriteLine(content);
+                    p.WriteLine(string.Join("", types));
                 }));
 
                 t.Start(port);
@@ -393,35 +392,6 @@ namespace Kinesis
 
         private void drawBody(Skeleton skeleton)
         {
-            // Render Torso
-            DrawBone(skeleton, JointType.Head, JointType.ShoulderCenter);
-            DrawBone(skeleton, JointType.ShoulderCenter, JointType.ShoulderLeft);
-            DrawBone(skeleton, JointType.ShoulderCenter, JointType.ShoulderRight);
-            DrawBone(skeleton, JointType.ShoulderCenter, JointType.Spine);
-            DrawBone(skeleton, JointType.Spine, JointType.HipCenter);
-            DrawBone(skeleton, JointType.HipCenter, JointType.HipLeft);
-            DrawBone(skeleton, JointType.HipCenter, JointType.HipRight);
-
-            // Left Arm
-            DrawBone(skeleton, JointType.ShoulderLeft, JointType.ElbowLeft);
-            DrawBone(skeleton, JointType.ElbowLeft, JointType.WristLeft);
-            DrawBone(skeleton, JointType.WristLeft, JointType.HandLeft);
-
-            // Right Arm
-            DrawBone(skeleton, JointType.ShoulderRight, JointType.ElbowRight);
-            DrawBone(skeleton, JointType.ElbowRight, JointType.WristRight);
-            DrawBone(skeleton, JointType.WristRight, JointType.HandRight);
-
-            // Left Leg
-            DrawBone(skeleton, JointType.HipLeft, JointType.KneeLeft);
-            DrawBone(skeleton, JointType.KneeLeft, JointType.AnkleLeft);
-            DrawBone(skeleton, JointType.AnkleLeft, JointType.FootLeft);
-
-            // Right Leg
-            DrawBone(skeleton, JointType.HipRight, JointType.KneeRight);
-            DrawBone(skeleton, JointType.KneeRight, JointType.AnkleRight);
-            DrawBone(skeleton, JointType.AnkleRight, JointType.FootRight);
-
             drawJoints(skeleton);
         }
 
