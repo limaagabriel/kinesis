@@ -3,7 +3,8 @@ Project to control a robot based on Kinect data. If you want more information ab
 
 ## Roadmap
 - [x] Get some information about a tracked body
-- [ ] Convert this data into something useful and simple
-- [ ] Use this data / send it to somewhere
+- [x] Convert this data into something useful and simple
+- [x] Use this data / send it to somewhere
+- [ ] Implement BackgroundWorker task
 - [ ] Finish its documentation
 - [ ] Translate docs to english
