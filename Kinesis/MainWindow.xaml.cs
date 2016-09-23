@@ -29,6 +29,7 @@ namespace Kinesis
         private readonly Brush TrackedJointBrush = new SolidColorBrush(Color.FromRgb(237, 84, 52));
         private readonly Brush InferredJointBrush = new SolidColorBrush(Color.FromRgb(52, 52, 52));
         private readonly BackgroundWorker SensorWorker = new BackgroundWorker();
+        private readonly BackgroundWorker DeviceWorker = new BackgroundWorker();
         private readonly int JointThickness = 10;
         private readonly JointType[] trackedJoints =
         {
@@ -61,6 +62,8 @@ namespace Kinesis
             flow.subscribe(reducer);
             SensorWorker.DoWork += SkeletonJob;
             SensorWorker.RunWorkerCompleted += FinishingSkeletonJob;
+            DeviceWorker.DoWork += DeviceJob;
+            DeviceWorker.RunWorkerCompleted += (o, e2) => canWriteToDevice = false;
             
             AngleBtn.Click += UpdateAngle;
             ReloadBtn.Click += ReloadDevices;
@@ -79,6 +82,16 @@ namespace Kinesis
             {
                 lastPosition.Add(type, new SkeletonPoint());
                 differentials.Add(type, new SkeletonPoint());
+            }
+        }
+
+        private void DeviceJob(object sender, DoWorkEventArgs e)
+        {
+            string message = e.Argument as string;
+
+            if(Device != null && Device.IsOpen && canWriteToDevice)
+            {
+                Device.Write(message);
             }
         }
 
@@ -271,10 +284,9 @@ namespace Kinesis
                 {
                     calibrate(sjr.Skeleton);
                 }
-                else if (Device != null && Device.IsOpen && canWriteToDevice)
+                else
                 {
-                    Device.Write(sjr.Content);
-                    canWriteToDevice = false;
+                    DeviceWorker.RunWorkerAsync(sjr.Content);
                 }
             }
         }
