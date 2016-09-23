@@ -4,31 +4,33 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Kinesis"
+        Loaded="WindowLoaded"
+        Closing="WindowClosing"
         mc:Ignorable="d"
         Title="Kinesis" Width="1024" Height="700" WindowStartupLocation="CenterScreen" Icon="pack://siteoforigin:,,,/../../Resources/Logo.png" ResizeMode="NoResize" >
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="157*"/>
-            <ColumnDefinition Width="97*"/>
+            <ColumnDefinition Width="286*"/>
+            <ColumnDefinition Width="223*"/>
         </Grid.ColumnDefinitions>
 
-        <Canvas x:Name="canvas" Margin="0,-6,0,45"/>
+        <Canvas Name="Canvas"/>
 
         <TextBox x:Name="status" TextWrapping="Wrap" Text="" Margin="10,642,0,2" BorderThickness="0" IsEnabled="False" Grid.Column="1"/>
 
-        <Image x:Name="camera" Margin="0,-6,0,341" Grid.Column="1"/>
-        <TextBox x:Name="angleInput" HorizontalAlignment="Left" Height="23" Margin="119,601,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" Grid.Column="1"/>
-        <Button x:Name="angleBtn" Content="Set Angle" HorizontalAlignment="Left" Margin="244,601,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
-        <Button x:Name="connectToDevice" Content="Connect" HorizontalAlignment="Left" Margin="244,515,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
-        <Button x:Name="reloadDevices" Content="Reload" HorizontalAlignment="Left" Margin="244,573,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
-        <Button x:Name="disconnectDevice" Content="Disconnect" HorizontalAlignment="Left" Margin="244,543,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="25"/>
-        <Button x:Name="calibrateBtn" Content="Calibrate Default Position" HorizontalAlignment="Left" Margin="119,485,0,0" VerticalAlignment="Top" Width="200" Grid.Column="1" Height="25"/>
-        <Button x:Name="loadDefaultBtn" Content="Load Default Position" HorizontalAlignment="Left" Margin="119,455,0,0" VerticalAlignment="Top" Width="200" Grid.Column="1" Height="25"/>
+        <Image x:Name="Camera" Margin="0,-6,0,284" Grid.Column="1"/>
+        <TextBox x:Name="AngleInput" HorizontalAlignment="Left" Height="23" Margin="119,601,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" Grid.Column="1"/>
+        <Button x:Name="AngleBtn" Content="Set Angle" HorizontalAlignment="Left" Margin="244,601,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
+        <Button x:Name="ConnectBtn" Content="Connect" HorizontalAlignment="Left" Margin="244,515,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
+        <Button x:Name="ReloadBtn" Content="Reload" HorizontalAlignment="Left" Margin="244,573,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
+        <Button x:Name="DisconnectBtn" Content="Disconnect" HorizontalAlignment="Left" Margin="244,543,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="25"/>
+        <Button x:Name="CalibrateBtn" Content="Calibrate Default Position" HorizontalAlignment="Left" Margin="119,485,0,0" VerticalAlignment="Top" Width="200" Grid.Column="1" Height="25"/>
+        <Button x:Name="LoadBtn" Content="Load Default Position" HorizontalAlignment="Left" Margin="119,455,0,0" VerticalAlignment="Top" Width="200" Grid.Column="1" Height="25"/>
 
         <Label x:Name="label" Content="Serial Devices" Grid.Column="1" Margin="28,550,225,0" VerticalAlignment="Top" Height="27"/>
         <Label x:Name="label_Copy1" Content="Elevation" Grid.Column="1" HorizontalAlignment="Left" Margin="28,600,0,0" VerticalAlignment="Top" Height="23" Width="58"/>
         <Label x:Name="trackingLabel" Content="Skeleton tracking area" HorizontalAlignment="Left" Margin="242,630,0,0" VerticalAlignment="Top" Height="26" Width="128"/>
-        <ListBox x:Name="devicesList" Grid.Column="1" HorizontalAlignment="Left" Height="81" Margin="119,515,0,0" VerticalAlignment="Top" Width="120"/>
+        <ListBox x:Name="DevicesList" Grid.Column="1" HorizontalAlignment="Left" Height="81" Margin="119,515,0,0" VerticalAlignment="Top" Width="120"/>
 
     </Grid>
 </Window>

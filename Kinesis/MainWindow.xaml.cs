@@ -14,6 +14,7 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.IO;
 using System.IO.Ports;
+using System.ComponentModel;
 using Microsoft.Kinect;
 
 namespace Kinesis
@@ -23,85 +24,188 @@ namespace Kinesis
     /// </summary>
     public partial class MainWindow : Window
     {
-        //Define variables
-        private KinectSensor kinect;
-        private readonly Brush inferredJointBrush = new SolidColorBrush(Color.FromRgb(52, 52, 52));
-        private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromRgb(237, 84, 52));
-        private readonly double JointThickness = 15;
-        private readonly double boneThickness = 5;
-        private readonly Brush trackedBoneBrush = Brushes.Black;
-        private readonly Brush inferredBoneBrush = Brushes.Gray;
-        private StateFlow flow = new StateFlow();
-        private SerialPort port;
-        private int frameReduction = 1;
-        private FileStream fs;
-        private bool isCalibrating = false;
-        private JointType[] trackedJoints = {
+        private KinectSensor Kinect;
+        private SerialPort Device;
+        private readonly Brush TrackedJointBrush = new SolidColorBrush(Color.FromRgb(237, 84, 52));
+        private readonly Brush InferredJointBrush = new SolidColorBrush(Color.FromRgb(52, 52, 52));
+        private readonly BackgroundWorker SensorWorker = new BackgroundWorker();
+        private readonly int JointThickness = 10;
+        private readonly JointType[] trackedJoints =
+        {
             JointType.ElbowLeft, JointType.ElbowRight,
             JointType.WristLeft, JointType.WristRight
         };
-        private int calibrationOffset = 150;
+        private readonly Dictionary<JointType, SkeletonPoint> lastPosition = new Dictionary<JointType, SkeletonPoint>();
+        private readonly Dictionary<JointType, SkeletonPoint> differentials = new Dictionary<JointType, SkeletonPoint>();
+        private readonly Dictionary<JointType, SkeletonPoint> calibrationData = new Dictionary<JointType, SkeletonPoint>();
+        private byte[] colorPixels;
+        private WriteableBitmap colorBitmap;
+        private int baudRate = 115200;
+        private StateFlow flow = new StateFlow();
+        private bool isCalibrating = false;
         private int calibrationIndex = 0;
-        private SkeletonPoint[] lastJointsData = new SkeletonPoint[20];
-        private SkeletonPoint[] differentials = new SkeletonPoint[20];
-        private SkeletonPoint[] calibrationData = new SkeletonPoint[20];
+        private readonly int calibrationOffset = 150;
         private string dir = "C:\\KinesisSettings\\";
         private string filePath = "C:\\KinesisSettings\\defaultPosition.txt";
         private string oldFilePath = "C:\\KinesisSettings\\defaultPosition.old.txt";
-        private SkeletonPoint[] defaultPosition;
-        private bool canWriteToPort = true;
-        private int baudRate = 57600;
+        private bool canWriteToDevice = true;
 
         public MainWindow()
         {
             InitializeComponent();
-            KinectSensor.KinectSensors.StatusChanged += StatusChanged;
-            angleBtn.Click += UpdateAngle;
-            connectToDevice.Click += ConnectToDevice;
-            disconnectDevice.Click += DisconnectDevice;
-            disconnectDevice.IsEnabled = false;
-            reloadDevices.Click += ReloadDevices;
-            calibrateBtn.Click += SetFiles;
-            loadDefaultBtn.Click += LoadDefaultPosition;
-            ReloadDevices(null, null);
-            
-            flow.subscribe(reducer);
-            if (kinect == null)
-                StatusChanged(null, null);
+            KinectSensor.KinectSensors.StatusChanged += SensorsStatusChanged;
+        }
 
-            for(int i = 0; i < differentials.Length; i++)
+        private void WindowLoaded(object sender, RoutedEventArgs e)
+        {
+            flow.subscribe(reducer);
+            SensorWorker.DoWork += SkeletonJob;
+            SensorWorker.RunWorkerCompleted += FinishingSkeletonJob;
+            
+            AngleBtn.Click += UpdateAngle;
+            ReloadBtn.Click += ReloadDevices;
+            DisconnectBtn.Click += DisconnectDevice;
+            ConnectBtn.Click += ConnectToDevice;
+            LoadBtn.Click += LoadDefaultPosition;
+            CalibrateBtn.Click += (o, e1) => flow.dispatch("CALIBRATE");
+
+            ReloadDevices(null, null);
+            DisconnectBtn.IsEnabled = false;
+
+            if(Kinect == null || !Kinect.IsRunning)
+                SensorsStatusChanged(null, null);
+
+            foreach(JointType type in trackedJoints)
             {
-                differentials[i] = new SkeletonPoint();
-                differentials[i].X = 0;
-                differentials[i].Y = 0;
-                differentials[i].Z = 0;
+                lastPosition.Add(type, new SkeletonPoint());
+                differentials.Add(type, new SkeletonPoint());
             }
         }
 
-        private void Window_Closed(object sender, EventArgs e)
+        private object reducer(string state)
         {
-            if (kinect != null && kinect.IsRunning)
-                kinect.Stop();
-            if (port != null && port.IsOpen)
-                port.Close();
-            port = null;
-            kinect = null;
+                status.Text = "State: " + state;
+                switch (state)
+                {
+                    case "NO_KINECT_ATTACHED":
+                        AngleBtn.IsEnabled = false;
+                        BitmapImage bitmap = new BitmapImage();
+                        bitmap.BeginInit();
+                        bitmap.UriSource = new Uri("pack://siteoforigin:,,,/Resources/Logo.png");
+                        bitmap.EndInit();
+                        Camera.Stretch = Stretch.Fill;
+                        Camera.Source = bitmap;
+                        break;
+                    case "KINECT_ATTACHED":
+                        AngleInput.Text = "" + Kinect.ElevationAngle;
+                        AngleBtn.IsEnabled = true;
+                        Camera.Source = colorBitmap;
+                        break;
+                    case "CONNECTED_TO_DEVICE":
+                        ConnectBtn.Content = Device.PortName;
+                        ConnectBtn.IsEnabled = false;
+                        DisconnectBtn.IsEnabled = true;
+                        break;
+                    case "DEVICE_DISCONNECTED":
+                        ConnectBtn.Content = "Connect";
+                        DisconnectBtn.IsEnabled = false;
+                        ConnectBtn.IsEnabled = true;
+                        break;
+                    case "CALIBRATE":
+                        isCalibrating = true;
+                        Canvas.Background = Brushes.DimGray;
+                        break;
+                    case "FINISH_CALIBRATING":
+                        isCalibrating = false;
+                        Canvas.Background = Brushes.White;
+                        break;
+                    default:
+                        break;
+                }
+                return null;
         }
 
-        private void StatusChanged(object sender, StatusChangedEventArgs e)
+        private void ConnectToDevice(object sender, RoutedEventArgs e)
+        {
+            string item = DevicesList.SelectedItem as string;
+            if(SerialPort.GetPortNames().Contains(item))
+            {
+                Device = new SerialPort(item, baudRate);
+                Device.Open();
+                Device.DataReceived += DataReceived;
+                flow.dispatch("CONNECTED_TO_DEVICE");
+            }
+        }
+
+        private void DataReceived(object sender, SerialDataReceivedEventArgs e)
+        {
+            canWriteToDevice = true;
+        }
+
+        private void DisconnectDevice(object sender, RoutedEventArgs e)
+        {
+            if (Device != null && Device.IsOpen)
+                Device.Close();
+            Device.Dispose();
+
+            flow.dispatch("DEVICE_DISCONNECTED");
+        }
+
+        private void ReloadDevices(object sender, RoutedEventArgs e)
+        {
+            DevicesList.Items.Clear();
+            
+            foreach(string port in SerialPort.GetPortNames())
+            {
+                DevicesList.Items.Add(port);
+            }
+        }
+
+
+        private void WindowClosing(object sender, EventArgs e)
+        {
+            if (Kinect != null && Kinect.IsRunning)
+                Kinect.Stop();
+            if (Device != null && Device.IsOpen)
+                Device.Close();
+        }
+
+        private void UpdateAngle(object sender, RoutedEventArgs e)
+        {
+            int Angle;
+            bool ok = int.TryParse(AngleInput.Text, out Angle);
+            if(ok)
+            {
+                Kinect.TryToSetAngle(Angle);
+            }
+            else
+            {
+                flow.dispatch("ERROR_PARSING_ANGLE");
+            }
+        }
+
+        private void SensorsStatusChanged(object sender, StatusChangedEventArgs e)
         {
             if (KinectSensor.KinectSensors.Count > 0)
             {
                 try
                 {
-                    kinect = KinectSensor.KinectSensors[0];
+                    Kinect = KinectSensor.KinectSensors.FirstOrDefault((KinectSensor k) =>
+                    {
+                        return k.Status == KinectStatus.Connected;
+                    });
 
-                    kinect.Start();
+                    Kinect.Start();
 
-                    kinect.SkeletonStream.Enable();
-                    kinect.ColorStream.Enable();
-                    kinect.SkeletonFrameReady += SkeletonFrameReady;
-                    kinect.ColorFrameReady += ColorFrameReady;
+                    Kinect.SkeletonStream.Enable();
+                    Kinect.ColorStream.Enable();
+                    Kinect.SkeletonFrameReady += SkeletonFrameReady;
+                    Kinect.ColorFrameReady += ColorFrameReady;
+
+                    colorPixels = new byte[Kinect.ColorStream.FramePixelDataLength];
+                    colorBitmap = new WriteableBitmap(Kinect.ColorStream.FrameWidth,
+                        Kinect.ColorStream.FrameHeight, 96, 96, PixelFormats.Bgr32, null);
+
                     flow.dispatch("KINECT_ATTACHED");
                 }
                 catch (Exception e1)
@@ -119,36 +223,23 @@ namespace Kinesis
         private void ColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
         {
             ColorImageFrame frame = e.OpenColorImageFrame();
+            if (frame == null) return;
 
-            if (frame != null && frame.FrameNumber % frameReduction == 0)
-            {
-                byte[] pixelData = new byte[frame.PixelDataLength];
-                frame.CopyPixelDataTo(pixelData);
+            frame.CopyPixelDataTo(colorPixels);
+            frame.Dispose();
 
-                camera.Source = (BitmapSource.Create(
-                    frame.Width, frame.Height, 96, 96, PixelFormats.Bgr32,
-                    null, pixelData, frame.Width * 4));
-            }
+            colorBitmap.WritePixels(new Int32Rect(0, 0,
+                colorBitmap.PixelWidth, colorBitmap.PixelHeight), colorPixels,
+                colorBitmap.PixelWidth * sizeof(int), 0);
         }
 
-        private void SetFiles(object sender, RoutedEventArgs e)
+        private void SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
-            if (!Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
+            SkeletonFrame frame = e.OpenSkeletonFrame();
+            if (frame == null || SensorWorker.IsBusy) return;
 
-            if (File.Exists(filePath))
-            {
-                if (File.Exists(oldFilePath))
-                    File.Delete(oldFilePath);
-
-                byte[] file = File.ReadAllBytes(filePath);
-                FileStream auxFs = File.Create(oldFilePath);
-                auxFs.Write(file, 0, file.Length);
-                auxFs.Close();
-            }
-
-            fs = File.Create(filePath);
-            flow.dispatch("CALIBRATE");
+            Canvas.Children.Clear();
+            SensorWorker.RunWorkerAsync(frame);
         }
 
         private SkeletonPoint Subtract(SkeletonPoint f, SkeletonPoint s)
@@ -169,332 +260,154 @@ namespace Kinesis
             return sp;
         }
 
-        private void SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
+        private void FinishingSkeletonJob(object sender, RunWorkerCompletedEventArgs e)
         {
-            canvas.Children.Clear();
-
-            SkeletonFrame frame = e.OpenSkeletonFrame();
-            if (frame == null) return;
-
-            Skeleton[] trackedSkeletons = new Skeleton[frame.SkeletonArrayLength];
-            frame.CopySkeletonDataTo(trackedSkeletons);
-            Skeleton s = null;
-
-            foreach(Skeleton skel in trackedSkeletons)
+            if (e.Error == null && !e.Cancelled)
             {
-                if(skel.TrackingState == SkeletonTrackingState.Tracked)
+                SkeletonJobResult sjr = e.Result as SkeletonJobResult;
+                drawJoints(sjr.Skeleton);
+
+                if(isCalibrating)
                 {
-                    s = skel;
-                    break;
+                    calibrate(sjr.Skeleton);
                 }
-            }
-
-            if (s == null) return;
-
-            drawBody(s);
-
-            foreach (Joint j in s.Joints)
-            {
-                int index = (int)j.JointType;
-                SkeletonPoint aux = Subtract(j.Position, lastJointsData[index]);
-                differentials[index] = Add(aux, differentials[index]);
-            }
-
-            foreach (Joint j in s.Joints)
-            {
-                int index = (int)j.JointType;
-                lastJointsData[index] = j.Position;
-            }
-
-            if (isCalibrating)
-            {
-                flow.dispatch("CALIBRATE");
-                foreach (Joint j in s.Joints)
+                else if (Device != null && Device.IsOpen && canWriteToDevice)
                 {
-                    int index = (int) j.JointType;
-                    if(calibrationData[index] == null)
-                    {
-                        calibrationData[index] = j.Position;
-                    }
-                    else
-                    {
-                        SkeletonPoint oldPoint = calibrationData[index];
-                        SkeletonPoint newPoint = new SkeletonPoint();
-                        newPoint.X = (j.Position.X + oldPoint.X) / 2;
-                        newPoint.Y = (j.Position.Y + oldPoint.Y) / 2;
-                        newPoint.Z = (j.Position.Z + oldPoint.Z) / 2;
-
-                        calibrationData[index] = newPoint;
-                    }
-                }
-
-                calibrationIndex += 1;
-
-                if(calibrationIndex > calibrationOffset)
-                {
-                    string content = "";
-                    for (int i = 0; i < calibrationData.Length; i++)
-                    {
-                        string x = calibrationData[i].X.ToString().Replace(',', '.');
-                        string y = calibrationData[i].Y.ToString().Replace(',', '.');
-                        string z = calibrationData[i].Z.ToString().Replace(',', '.');
-
-                        content += i + "," + x + "," + y + "," + z + ";"; 
-                    }
-
-                    byte[] byteArray = Encoding.ASCII.GetBytes(content);
-                    fs.Write(byteArray, 0, byteArray.Length);
-
-                    flow.dispatch("FINISH_CALIBRATING");
-                    fs.Close();
-                    fs = null;
-                }
-            }
-            else if (port != null && port.IsOpen && canWriteToPort)
-            {
-                Thread t = new Thread(new ParameterizedThreadStart((object o) =>
-                {
-                    SerialPort p = (SerialPort)o;
-
-                    string[] types = trackedJoints.AsParallel().Select((JointType type) =>
-                    {
-                        int index = (int)type;
-                        SkeletonPoint sp = differentials[index];
-                        string z = sp.Z.ToString().Replace(',', '.');
-                        string y = sp.Y.ToString().Replace(',', '.');
-                        string x = sp.X.ToString().Replace(',', '.');
-                        return type.ToString() + "," + x + "," + y + "," + z + ";";
-
-                        //differentials[index].X = 0;
-                        //differentials[index].Y = 0;
-                        //differentials[index].Z = 0;
-                    }).ToArray();
-
-                    p.WriteLine(string.Join("", types));
-                }));
-
-                t.Start(port);
-                canWriteToPort = false;
-            }
-        }
-
-        private void ReceiveDataFromDevice(object sender, SerialDataReceivedEventArgs e)
-        {
-            canWriteToPort = true;
-        }
-
-        private object reducer(string state)
-        {
-            {
-                status.Text = "State: " + state;
-                switch (state)
-                {
-                    case "NO_KINECT_ATTACHED":
-                        angleBtn.IsEnabled = false;
-                        BitmapImage bitmap = new BitmapImage();
-                        bitmap.BeginInit();
-                        bitmap.UriSource = new Uri("pack://siteoforigin:,,,/Resources/Logo.png");
-                        bitmap.EndInit();
-                        camera.Stretch = Stretch.Fill;
-                        camera.Source = bitmap;
-                        break;
-                    case "KINECT_ATTACHED":
-                        angleInput.Text = "" + kinect.ElevationAngle;
-                        angleBtn.IsEnabled = true;
-                        break;
-                    case "CONNECTED_TO_DEVICE":
-                        connectToDevice.Content = port.PortName;
-                        connectToDevice.IsEnabled = false;
-                        disconnectDevice.IsEnabled = true;
-                        break;
-                    case "DEVICE_DISCONNECTED":
-                        connectToDevice.Content = "Connect";
-                        disconnectDevice.IsEnabled = false;
-                        connectToDevice.IsEnabled = true;
-                        break;
-                    case "CALIBRATE":
-                        isCalibrating = true;
-                        canvas.Background = Brushes.DimGray;
-                        break;
-                    case "FINISH_CALIBRATING":
-                        isCalibrating = false;
-                        canvas.Background = Brushes.White;
-                        break;
-                    default:
-                        break;
-                }
-            }
-            return null;
-        }
-
-        private void ReloadDevices(object sender, RoutedEventArgs e)
-        {
-            devicesList.Items.Clear();
-            foreach (String s in SerialPort.GetPortNames())
-            {
-                devicesList.Items.Add(s);
-            }
-        }
-
-        private void ConnectToDevice(object sender, RoutedEventArgs e)
-        {
-            if(devicesList.SelectedItem != null)
-            {
-                string selected = devicesList.SelectedItem.ToString();
-                if (SerialPort.GetPortNames().Contains(selected) && 
-                    (port == null || !port.IsOpen))
-                {
-                    LoadDefaultPosition(null, null);
-
-                    if(defaultPosition != null)
-                    {
-                        port = new SerialPort(selected, baudRate);
-                        port.Open();
-                        port.DataReceived += ReceiveDataFromDevice;
-                        flow.dispatch("CONNECTED_TO_DEVICE");
-                    }
-                }
-                else
-                {
-                    status.Text = "Invalid device port descriptor.";
+                    Device.Write(sjr.Content);
+                    canWriteToDevice = false;
                 }
             }
         }
 
-        private void DisconnectDevice(object sender, RoutedEventArgs e)
+        private void SkeletonJob(object sender, DoWorkEventArgs e)
         {
-            if(port != null)
+            SkeletonFrame frame = e.Argument as SkeletonFrame;
+            Skeleton[] skeletons = new Skeleton[frame.SkeletonArrayLength];
+            frame.CopySkeletonDataTo(skeletons);
+            frame.Dispose();
+
+            Skeleton skeleton = skeletons.FirstOrDefault((Skeleton skel) =>
             {
-                if (port.IsOpen)
-                    port.Close();
-                port = null;
+                return skel.TrackingState == SkeletonTrackingState.Tracked;
+            });
+
+            if (skeleton == null)
+            {
+                if (isCalibrating)
+                    calibrationIndex = 0;
+
+                e.Cancel = true;
+                return;
             }
 
-            flow.dispatch("DEVICE_DISCONNECTED");
+            string data = "";
+            
+            foreach(JointType type in trackedJoints)
+            {
+                differentials[type] = Subtract(skeleton.Joints[type].Position, lastPosition[type]);
+                string x = differentials[type].X.ToString().Replace(',', '.');
+                string y = differentials[type].Y.ToString().Replace(',', '.');
+                string z = differentials[type].Z.ToString().Replace(',', '.');
+
+                data += type.ToString() + "," + x + "," + y + "," + z + ";";
+                lastPosition[type] = skeleton.Joints[type].Position;
+            }
+
+            e.Result = new SkeletonJobResult(skeleton, data);
         }
 
-        private void UpdateAngle(object sender, RoutedEventArgs e)
+        private void calibrate(Skeleton s)
         {
-            int angle = 0;
-            bool result = int.TryParse(angleInput.Text, out angle);
-            if (result)
+            if(calibrationData.Count == 0)
             {
-                status.Text = "Moving to " + angle + "...";
-                var movement = kinect.TryToSetAngle(angle);
+                foreach(Joint j in s.Joints)
+                {
+                    calibrationData.Add(j.JointType, j.Position);
+                }
             }
             else
             {
-                MessageBox.Show("Elevation angle must be an integer between " +
-                    kinect.MinElevationAngle + " and " + kinect.MaxElevationAngle,
-                    "Error on input");
+                foreach(Joint j in s.Joints)
+                {
+                    JointType type = j.JointType;
+                    SkeletonPoint sp = new SkeletonPoint();
+                    sp.X = (calibrationData[type].X + j.Position.X) / 2;
+                    sp.Y = (calibrationData[type].Y + j.Position.Y) / 2;
+                    sp.Z = (calibrationData[type].Z + j.Position.Z) / 2;
+
+                    calibrationData[type] = sp;
+                }
+                calibrationIndex += 1;
             }
-        }
 
-        private void drawBody(Skeleton skeleton)
-        {
-            drawJoints(skeleton);
-        }
-
-        private void DrawBone(Skeleton skeleton, JointType jointType0, JointType jointType1)
-        {
-            Joint joint0 = skeleton.Joints[jointType0];
-            Joint joint1 = skeleton.Joints[jointType1];
-
-            // If we can't find either of these joints, exit
-            if (joint0.TrackingState == JointTrackingState.NotTracked ||
-                joint1.TrackingState == JointTrackingState.NotTracked)
+            if(calibrationIndex >= calibrationOffset)
             {
-                return;
-            }
+                isCalibrating = false;
+                flow.dispatch("FINISH_CALIBRATING");
+                string data = "";
+                foreach(KeyValuePair<JointType, SkeletonPoint> pair in calibrationData)
+                {
+                    string x = pair.Value.X.ToString().Replace(',', '.');
+                    string y = pair.Value.Y.ToString().Replace(',', '.');
+                    string z = pair.Value.Z.ToString().Replace(',', '.');
+                    data += pair.Key.ToString() + "," + x + "," + y + "," + z + ";";
+                }
 
-            // Don't draw if both points are inferred
-            if (joint0.TrackingState == JointTrackingState.Inferred &&
-                joint1.TrackingState == JointTrackingState.Inferred)
-            {
-                return;
-            }
+                if(!Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+                
+                if(File.Exists(filePath))
+                {
+                    if(File.Exists(oldFilePath))
+                    {
+                        File.Delete(oldFilePath);
+                    }
 
-            // We assume all drawn bones are inferred unless BOTH joints are tracked
-            Brush drawBrush = this.inferredBoneBrush;
-            if (joint0.TrackingState == JointTrackingState.Tracked && joint1.TrackingState == JointTrackingState.Tracked)
-            {
-                drawBrush = this.trackedBoneBrush;
-            }
-            Line line = new Line();
-            line.X1 = joint0.Position.X;
-            line.X2 = joint1.Position.X;
-            line.Y1 = joint0.Position.Y;
-            line.Y2 = joint1.Position.Y;
+                    byte[] oldData = File.ReadAllBytes(filePath);
+                    FileStream auxFs = File.Create(oldFilePath);
+                    auxFs.Write(oldData, 0, oldData.Length);
+                    auxFs.Close();
+                }
 
-            line.StrokeThickness = boneThickness;
-            line.Stroke = drawBrush;
-            canvas.Children.Add(line);
-            Canvas.SetTop(line, line.X1);
-            Canvas.SetLeft(line, line.Y1);
+                byte[] byteArray = Encoding.ASCII.GetBytes(data);
+
+                FileStream fs = File.Create(filePath);
+                fs.Write(byteArray, 0, byteArray.Length);
+                fs.Close();
+            }
         }
 
         private void LoadDefaultPosition(object sender, RoutedEventArgs e)
         {
-            defaultPosition = ReadDefaultSkeletonPoints();
-            if(defaultPosition != null)
+            try
             {
-                status.Text = "Default position loaded successfully!";
-                lastJointsData = defaultPosition;
-            }
+                byte[] data = File.ReadAllBytes(filePath);
+                string content = Encoding.ASCII.GetString(data);
+                string[] lines = content.Split(';');
 
-            for(int i = 0; i < differentials.Length; i++)
+                for(int i = 0; i < lines.Length - 1; i++)
+                {
+                    string[] tokens = lines[i].Split(',');
+
+                    JointType type = (JointType) Enum.Parse(typeof(JointType), tokens[0]);
+                    SkeletonPoint sp = new SkeletonPoint();
+                    sp.X = float.Parse(tokens[1].Replace('.', ','));
+                    sp.Y = float.Parse(tokens[2].Replace('.', ','));
+                    sp.Z = float.Parse(tokens[3].Replace('.', ','));
+
+                    lastPosition[type] = sp;
+
+                    MessageBox.Show(type.ToString() + " " + sp.X + " " + sp.Y + " " + sp.Z);
+                }
+            }
+            catch(FileNotFoundException ex)
             {
-                differentials[i] = new SkeletonPoint();
-                differentials[i].X = 0;
-                differentials[i].Y = 0;
-                differentials[i].Z = 0;
+                string message = ex.Message;
+                MessageBox.Show("Error on loading. You should calibrate first, so Kinesis will have something to read!", "File not found!");
             }
         }
-
-        private SkeletonPoint[] ReadDefaultSkeletonPoints()
-        {
-            SkeletonPoint[] allSp = new SkeletonPoint[20];
-            if(!File.Exists(filePath))
-            {
-                MessageBox.Show("Please, start calibration! Kinesis needs this file to make things right.",
-                    "defaultPosition file not found");
-                return null;
-            }
-            byte[] content = File.ReadAllBytes(filePath);
-            string completeFile = Encoding.ASCII.GetString(content);
-
-            string[] lines = completeFile.Split('\n');
-            for (int i = 0; i < lines.Length - 1; i++)
-            {
-                string[] data = lines[i].Split(';');
-                SkeletonPoint sp = new SkeletonPoint();
-                int index = int.Parse(data[0]);
-                sp.X = float.Parse(data[1]);
-                sp.Y = float.Parse(data[2]);
-                sp.Z = float.Parse(data[3]);
-
-                allSp[index] = sp;
-            }
-
-            return allSp;
-        }
-
-        private void drawJointsFromDefaultPosition()
-        {
-            SkeletonPoint[] allSp = ReadDefaultSkeletonPoints();
-
-            for(int i = 0; i < allSp.Length; i++) {
-                SkeletonPoint sp = allSp[i];
-                Point p = kinect.SkeletonPointToScreen(sp);
-                Ellipse e = new Ellipse();
-                e.Fill = trackedJointBrush;
-                e.Width = JointThickness;
-                e.Height = JointThickness;
-                canvas.Children.Add(e);
-                Canvas.SetTop(e, p.Y);
-                Canvas.SetLeft(e, p.X);
-            }
-         }
 
         private void drawJoints(Skeleton skeleton)
         {
@@ -504,26 +417,25 @@ namespace Kinesis
 
                 if (joint.TrackingState == JointTrackingState.Tracked)
                 {
-                    drawBrush = trackedJointBrush;
+                    drawBrush = TrackedJointBrush;
                 }
                 else if (joint.TrackingState == JointTrackingState.Inferred)
                 {
-                    drawBrush = inferredJointBrush;
+                    drawBrush = InferredJointBrush;
                 }
 
                 if (drawBrush != null)
                 {
+                    Point p = Kinect.SkeletonPointToScreen(joint.Position);
                     Ellipse e = new Ellipse();
-                    Point p = kinect.SkeletonPointToScreen(joint.Position);
-                    e.Fill = drawBrush;
                     e.Width = JointThickness;
                     e.Height = JointThickness;
-                    canvas.Children.Add(e);
-                    Canvas.SetTop(e, p.Y);
+                    e.Fill = drawBrush;
+                    Canvas.Children.Add(e);
                     Canvas.SetLeft(e, p.X);
-
+                    Canvas.SetTop(e, p.Y);
                 }
-            }
+            }            
         }
     }
 
