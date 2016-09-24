@@ -284,9 +284,10 @@ namespace Kinesis
                 {
                     calibrate(sjr.Skeleton);
                 }
-                else
+                else if (Device != null && Device.IsOpen && canWriteToDevice)
                 {
-                    DeviceWorker.RunWorkerAsync(sjr.Content);
+                    Device.Write(sjr.Content);
+                    canWriteToDevice = false;
                 }
             }
         }
@@ -316,7 +317,9 @@ namespace Kinesis
             
             foreach(JointType type in trackedJoints)
             {
-                differentials[type] = Subtract(skeleton.Joints[type].Position, lastPosition[type]);
+                SkeletonPoint sp = Subtract(skeleton.Joints[type].Position, lastPosition[type]);
+                differentials[type] = Add(sp, differentials[type]);
+
                 string x = differentials[type].X.ToString().Replace(',', '.');
                 string y = differentials[type].Y.ToString().Replace(',', '.');
                 string z = differentials[type].Z.ToString().Replace(',', '.');
@@ -404,14 +407,15 @@ namespace Kinesis
                     string[] tokens = lines[i].Split(',');
 
                     JointType type = (JointType) Enum.Parse(typeof(JointType), tokens[0]);
-                    SkeletonPoint sp = new SkeletonPoint();
-                    sp.X = float.Parse(tokens[1].Replace('.', ','));
-                    sp.Y = float.Parse(tokens[2].Replace('.', ','));
-                    sp.Z = float.Parse(tokens[3].Replace('.', ','));
+                    if(trackedJoints.Contains(type))
+                    {
+                        SkeletonPoint sp = new SkeletonPoint();
+                        sp.X = float.Parse(tokens[1].Replace('.', ','));
+                        sp.Y = float.Parse(tokens[2].Replace('.', ','));
+                        sp.Z = float.Parse(tokens[3].Replace('.', ','));
 
-                    lastPosition[type] = sp;
-
-                    MessageBox.Show(type.ToString() + " " + sp.X + " " + sp.Y + " " + sp.Z);
+                        lastPosition[type] = sp;
+                    }
                 }
             }
             catch(FileNotFoundException ex)
