@@ -17,8 +17,9 @@
         <Canvas Name="Canvas"/>
 
         <TextBox x:Name="status" TextWrapping="Wrap" Text="" Margin="10,642,0,2" BorderThickness="0" IsEnabled="False" Grid.Column="1"/>
+        <TextBox x:Name="monitor" TextWrapping="Wrap" Text="" Margin="5,355,5,221" BorderThickness="0" IsEnabled="False" Grid.Column="1"/>
 
-        <Image x:Name="Camera" Margin="0,-6,0,284" Grid.Column="1"/>
+        <Image x:Name="Camera" Margin="0,-6,0,321" Grid.Column="1"/>
         <TextBox x:Name="AngleInput" HorizontalAlignment="Left" Height="23" Margin="119,601,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" Grid.Column="1"/>
         <Button x:Name="AngleBtn" Content="Set Angle" HorizontalAlignment="Left" Margin="244,601,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>
         <Button x:Name="ConnectBtn" Content="Connect" HorizontalAlignment="Left" Margin="244,515,0,0" VerticalAlignment="Top" Width="75" Grid.Column="1" Height="23"/>

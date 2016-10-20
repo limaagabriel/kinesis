@@ -34,7 +34,8 @@ namespace Kinesis
         private readonly JointType[] trackedJoints =
         {
             JointType.ElbowLeft, JointType.ElbowRight,
-            JointType.WristLeft, JointType.WristRight
+            JointType.WristLeft, JointType.WristRight,
+            JointType.HipCenter, JointType.Head
         };
         private readonly Dictionary<JointType, SkeletonPoint> lastPosition = new Dictionary<JointType, SkeletonPoint>();
         private readonly Dictionary<JointType, SkeletonPoint> differentials = new Dictionary<JointType, SkeletonPoint>();
@@ -50,6 +51,7 @@ namespace Kinesis
         private string filePath = "C:\\KinesisSettings\\defaultPosition.txt";
         private string oldFilePath = "C:\\KinesisSettings\\defaultPosition.old.txt";
         private bool canWriteToDevice = true;
+        private int trackingId = -1;
 
         public MainWindow()
         {
@@ -208,12 +210,12 @@ namespace Kinesis
                         return k.Status == KinectStatus.Connected;
                     });
 
-                    Kinect.Start();
-
                     Kinect.SkeletonStream.Enable();
                     Kinect.ColorStream.Enable();
                     Kinect.SkeletonFrameReady += SkeletonFrameReady;
                     Kinect.ColorFrameReady += ColorFrameReady;
+
+                    Kinect.Start();
 
                     colorPixels = new byte[Kinect.ColorStream.FramePixelDataLength];
                     colorBitmap = new WriteableBitmap(Kinect.ColorStream.FrameWidth,
@@ -223,6 +225,7 @@ namespace Kinesis
                 }
                 catch (Exception e1)
                 {
+                    Kinect = null;
                     status.Text = e1.Message;
                     flow.dispatch("NO_KINECT_ATTACHED");
                 }
@@ -249,7 +252,22 @@ namespace Kinesis
         private void SkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
             SkeletonFrame frame = e.OpenSkeletonFrame();
-            if (frame == null || SensorWorker.IsBusy) return;
+            if (frame == null || SensorWorker.IsBusy)
+            {
+                foreach (JointType type in trackedJoints)
+                {
+                    differentials.Remove(type);
+                    differentials.Add(type, new SkeletonPoint());
+                }
+
+                if(Device != null && Device.IsOpen && canWriteToDevice)
+                {
+                    Device.Write("RESTART");
+                    canWriteToDevice = false;
+                }
+
+                return;
+            }
 
             Canvas.Children.Clear();
             SensorWorker.RunWorkerAsync(frame);
@@ -301,7 +319,12 @@ namespace Kinesis
 
             Skeleton skeleton = skeletons.FirstOrDefault((Skeleton skel) =>
             {
-                return skel.TrackingState == SkeletonTrackingState.Tracked;
+                bool r = true;
+                if(trackingId != -1)
+                {
+                    r = skel.TrackingId == trackingId;
+                }
+                return skel.TrackingState == SkeletonTrackingState.Tracked && r;
             });
 
             if (skeleton == null)
@@ -309,11 +332,27 @@ namespace Kinesis
                 if (isCalibrating)
                     calibrationIndex = 0;
 
+                if (Device != null && Device.IsOpen && canWriteToDevice)
+                {
+                    Device.Write("RESTART");
+                    canWriteToDevice = false;
+                }
+
+                foreach (JointType type in trackedJoints)
+                {
+                    differentials.Remove(type);
+                    differentials.Add(type, new SkeletonPoint());
+                }
+
+                trackingId = -1;
+
                 e.Cancel = true;
                 return;
             }
 
             string data = "";
+
+            trackingId = skeleton.TrackingId;
             
             foreach(JointType type in trackedJoints)
             {
