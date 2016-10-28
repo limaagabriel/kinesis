@@ -5,6 +5,6 @@ Project to control a robot based on Kinect data. If you want more information ab
 - [x] Get some information about a tracked body
 - [x] Convert this data into something useful and simple
 - [x] Use this data / send it to somewhere
-- [ ] Implement BackgroundWorker task
+- [x] Implement BackgroundWorker task
 - [ ] Finish its documentation
 - [ ] Translate docs to english
